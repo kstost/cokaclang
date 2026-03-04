@@ -1,3 +1,5 @@
+![cokaclang](title.jpg)
+
 # COKAC Language
 
 `cokaclang`은 한글로 이루어진 프로그래밍 언어입니다.

@@ -1,0 +1,21 @@
+변수 svc1 = 모듈가져오기("modules/complex/post_service.mod");
+변수 svc2 = 모듈가져오기("modules/complex/post_service.mod");
+
+변수 posts = [
+    {likes:[1,2], comments:[{x:1}]},
+    {likes:[1], comments:[{x:1},{x:1}]},
+    {likes:[1,2,3], comments:[]}
+];
+
+변수 score = svc1.총점(posts);
+// (2*10+1) + (1*10+2) + (3*10+0) = 63
+단언(score == 63, "모듈 그래프 총점 계산 실패");
+
+단언(svc1.총점(posts) == svc2.총점(posts), "모듈 캐시/동일성 실패");
+
+변수 add = svc1.누적기(100);
+단언(add(7) == 107, "모듈 클로저 누적 1 실패");
+단언(add(8) == 115, "모듈 클로저 누적 2 실패");
+
+변수 add2 = svc1.누적기(0);
+단언(add2(1) == 1 그리고 add2(2) == 3, "모듈 독립 클로저 인스턴스 실패");

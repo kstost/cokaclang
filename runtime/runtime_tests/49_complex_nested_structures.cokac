@@ -1,0 +1,63 @@
+변수 board = {
+    이름: "프로젝트A",
+    posts: [
+        {id: 1, title: "t1", likes: [1,2,3], comments: [{user:"u1", len: 3}, {user:"u2", len: 5}]},
+        {id: 2, title: "t2", likes: [4], comments: [{user:"u1", len: 2}]},
+        {id: 3, title: "t3", likes: [7,8], comments: []}
+    ],
+    meta: {owner: "admin", tags: ["lang", "runtime", "test"]}
+};
+
+함수 총좋아요합(게시글들) {
+    변수 sum = 0;
+    변수 p = 없음;
+    변수 part = 0;
+    동안 (변수 i = 0; i < 길이(게시글들); i = i + 1) {
+        p = 게시글들[i];
+        part = 배열리듀스(p.likes, 함수(acc, v, idx) { 반환 acc + v; }, 0);
+        sum = sum + part;
+    }
+    반환 sum;
+}
+
+함수 총댓글길이합(게시글들) {
+    변수 total = 0;
+    변수 i = 0;
+    변수 j = 0;
+    반복 (i < 길이(게시글들)) {
+        j = 0;
+        반복 (j < 길이(게시글들[i].comments)) {
+            total = total + 게시글들[i].comments[j].len;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    반환 total;
+}
+
+변수 likeSum = 총좋아요합(board.posts);
+단언(likeSum == 25, "중첩 좋아요 합계 실패");
+
+변수 cLen = 총댓글길이합(board.posts);
+단언(cLen == 10, "중첩 댓글 길이 합계 실패");
+
+변수 titles = 배열맵(board.posts, 함수(p, i) { 반환 p.title; });
+단언(배열문자열합치기(titles, ",") == "t1,t2,t3", "중첩 제목 맵 실패");
+
+변수 hot = 배열필터(board.posts, 함수(p, i) {
+    반환 길이(p.likes) >= 2;
+});
+단언(길이(hot) == 2, "중첩 필터 길이 실패");
+
+변수 cloned = 객체복사(board);
+객체설정(cloned, "이름", "프로젝트B");
+단언(board.이름 == "프로젝트A", "객체복사 독립 실패");
+
+변수 mergedMeta = 객체합치기(객체복사(board.meta), {version: 3, owner: "root"});
+단언(mergedMeta.version == 3, "객체합치기 version 실패");
+단언(mergedMeta.owner == "root", "객체합치기 owner 실패");
+
+변수 json = 자료예쁘게문자열화(board, 2);
+변수 parsed = 자료파싱(json);
+단언(parsed.meta.owner == "admin", "중첩 JSON owner 실패");
+단언(parsed.posts[1].likes[0] == 4, "중첩 JSON likes 실패");

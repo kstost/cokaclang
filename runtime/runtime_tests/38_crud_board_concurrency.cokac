@@ -1,0 +1,89 @@
+변수 posts = [];
+변수 nextId = 1;
+변수 port = 19141;
+변수 server = 서버열기(port, "127.0.0.1");
+
+함수 handle_request(req) {
+    변수 method = req.메서드;
+    변수 path = req.경로;
+
+    만약 (method == "POST" 그리고 path == "/posts") {
+        변수 body = 자료파싱(req.본문);
+        변수 post = {id: nextId, title: body.title, content: body.content};
+        배열추가(posts, post);
+        nextId = nextId + 1;
+        반환 {status: 201, body: 자료문자열화(post)};
+    }
+
+    만약 (method == "GET" 그리고 path == "/posts") {
+        반환 {status: 200, body: 자료문자열화(posts)};
+    }
+
+    반환 {status: 404, body: "{\"error\":\"route_not_found\"}"};
+}
+
+// 동시 POST 요청 20개 발사
+변수 reqTasks = [];
+변수 t = 없음;
+동안 (변수 i1 = 1; i1 <= 20; i1 = i1 + 1) {
+    t = 비동기가져오기요청("http://127.0.0.1:19141/posts", {
+        메서드: "POST",
+        로컬차단: 거짓,
+        최대시간초: 5,
+        연결시간초: 1,
+        재시도: 0,
+        헤더: {"Content-Type": "application/json"},
+        본문: 자료문자열화({title: "t" + 문자열(i1), content: "c" + 문자열(i1)})
+    });
+    배열추가(reqTasks, t);
+}
+
+// 서버는 20개 요청을 순차 수락/응답
+변수 req = 없음;
+변수 result = 없음;
+동안 (변수 k = 0; k < 20; k = k + 1) {
+    req = 대기최대(비동기요청받기(server), 5000);
+    result = handle_request(req);
+    단언(응답보내기(req.연결, result.status, result.body, {"Content-Type": "application/json"}), "응답보내기 실패");
+    단언(연결닫기(req.연결), "요청 연결닫기 실패");
+}
+
+// 클라이언트 응답 수집/검증
+변수 ids = [];
+변수 resp = 없음;
+변수 p = 없음;
+동안 (변수 i2 = 0; i2 < 길이(reqTasks); i2 = i2 + 1) {
+    resp = 대기최대(reqTasks[i2], 5000);
+    단언(resp.상태 == 201, "동시 POST 상태 실패");
+    p = 응답자료(resp);
+    배열추가(ids, p.id);
+}
+
+단언(길이(ids) == 20, "응답 id 개수 실패");
+
+// 중복 없는지 확인
+변수 uniq = {};
+동안 (변수 i3 = 0; i3 < 길이(ids); i3 = i3 + 1) {
+    객체설정(uniq, 문자열(ids[i3]), 참);
+}
+단언(길이(객체키들(uniq)) == 20, "id 중복 발생");
+
+// 목록 API로 최종 상태 확인
+변수 tList = 비동기가져오기요청("http://127.0.0.1:19141/posts", {
+    메서드: "GET",
+    로컬차단: 거짓,
+    최대시간초: 5,
+    연결시간초: 1,
+    재시도: 0
+});
+변수 reqList = 대기최대(비동기요청받기(server), 5000);
+변수 resList = handle_request(reqList);
+응답보내기(reqList.연결, resList.status, resList.body, {"Content-Type": "application/json"});
+연결닫기(reqList.연결);
+
+변수 respList = 대기최대(tList, 5000);
+단언(respList.상태 == 200, "목록 상태 실패");
+변수 list = 응답자료(respList);
+단언(길이(list) == 20, "최종 목록 길이 실패");
+
+단언(연결닫기(server), "서버 닫기 실패");

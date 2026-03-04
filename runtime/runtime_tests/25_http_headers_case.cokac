@@ -1,0 +1,22 @@
+변수 port = 19102;
+변수 server = 서버열기(port, "127.0.0.1");
+
+변수 acceptTask = 비동기요청받기(server);
+변수 reqTask = 비동기가져오기요청("http://127.0.0.1:19102/h", {
+    메서드: "GET",
+    로컬차단: 거짓,
+    최대시간초: 3,
+    연결시간초: 1,
+    재시도: 0
+});
+
+변수 req = 대기최대(acceptTask, 3000);
+단언(응답보내기(req.연결, 200, "ok", {"X-Test": "One", "content-type": "text/plain"}), "응답보내기 헤더 실패");
+연결닫기(req.연결);
+
+변수 resp = 대기최대(reqTask, 3000);
+단언(응답헤더값(resp, "x-test") == "One", "응답헤더값 소문자 조회 실패");
+단언(응답헤더값(resp, "X-TEST") == "One", "응답헤더값 대문자 조회 실패");
+단언(응답헤더값(resp, "Content-Type") == "text/plain", "응답헤더값 content-type 실패");
+
+연결닫기(server);

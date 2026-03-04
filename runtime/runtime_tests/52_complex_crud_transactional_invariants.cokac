@@ -1,0 +1,160 @@
+변수 posts = [];
+변수 nextId = 1;
+변수 port = 19150;
+변수 server = 서버열기(port, "127.0.0.1");
+
+함수 split(path) { 반환 문자분할(path, "/"); }
+함수 id_from(path) {
+    변수 parts = split(path);
+    만약 (길이(parts) >= 3) { 반환 숫자(parts[2]); }
+    반환 -1;
+}
+
+함수 find_idx(id) {
+    변수 i = 0;
+    반복 (i < 길이(posts)) {
+        만약 (posts[i].id == id) { 반환 i; }
+        i = i + 1;
+    }
+    반환 -1;
+}
+
+함수 count_comments() {
+    변수 sum = 0;
+    변수 i = 0;
+    반복 (i < 길이(posts)) {
+        sum = sum + 길이(posts[i].comments);
+        i = i + 1;
+    }
+    반환 sum;
+}
+
+함수 handle(req) {
+    변수 m = req.메서드;
+    변수 p = req.경로;
+
+    만약 (m == "POST" 그리고 p == "/posts") {
+        변수 b = 자료파싱(req.본문);
+        변수 it = {id: nextId, title: b.title, comments: []};
+        배열추가(posts, it);
+        nextId = nextId + 1;
+        반환 {status: 201, body: 자료문자열화(it)};
+    }
+
+    만약 (m == "POST" 그리고 문자포함(p, "/comments")) {
+        변수 id = id_from(p);
+        변수 idx = find_idx(id);
+        만약 (idx < 0) { 반환 {status: 404, body: "{\"error\":\"nf\"}"}; }
+        변수 b = 자료파싱(req.본문);
+        배열추가(posts[idx].comments, {text: b.text});
+        반환 {status: 201, body: "{\"ok\":true}"};
+    }
+
+    만약 (m == "DELETE" 그리고 문자시작(p, "/posts/")) {
+        변수 id = id_from(p);
+        변수 idx = find_idx(id);
+        만약 (idx < 0) { 반환 {status: 404, body: "{\"error\":\"nf\"}"}; }
+        배열삭제(posts, idx);
+        반환 {status: 200, body: "{\"ok\":true}"};
+    }
+
+    만약 (m == "GET" 그리고 p == "/stats") {
+        반환 {status: 200, body: 자료문자열화({posts: 길이(posts), comments: count_comments()})};
+    }
+
+    반환 {status: 404, body: "{\"error\":\"route\"}"};
+}
+
+// 1) post 10개 동시 생성
+변수 postTasks = [];
+변수 t = 없음;
+동안 (변수 i1 = 1; i1 <= 10; i1 = i1 + 1) {
+    t = 비동기가져오기요청("http://127.0.0.1:19150/posts", {
+        메서드: "POST", 로컬차단: 거짓, 최대시간초: 5, 연결시간초: 1, 재시도: 0,
+        헤더: {"Content-Type":"application/json"},
+        본문: 자료문자열화({title: "p" + 문자열(i1)})
+    });
+    배열추가(postTasks, t);
+}
+
+변수 req = 없음;
+변수 res = 없음;
+동안 (변수 s1 = 0; s1 < 10; s1 = s1 + 1) {
+    req = 대기최대(비동기요청받기(server), 5000);
+    res = handle(req);
+    응답보내기(req.연결, res.status, res.body, {"Content-Type":"application/json"});
+    연결닫기(req.연결);
+}
+
+변수 ids = [];
+변수 rp = 없음;
+변수 pj = 없음;
+동안 (변수 i2 = 0; i2 < 길이(postTasks); i2 = i2 + 1) {
+    rp = 대기최대(postTasks[i2], 5000);
+    단언(rp.상태 == 201, "생성 상태 실패");
+    pj = 응답자료(rp);
+    배열추가(ids, pj.id);
+}
+단언(길이(ids) == 10, "생성 id 수 실패");
+
+// 2) 댓글 30개 동시 추가 (post당 3개)
+변수 cTasks = [];
+변수 k = 0;
+동안 (변수 i3 = 0; i3 < 길이(ids); i3 = i3 + 1) {
+    k = 1;
+    반복 (k <= 3) {
+        t = 비동기가져오기요청("http://127.0.0.1:19150/posts/" + 문자열(ids[i3]) + "/comments", {
+            메서드: "POST", 로컬차단: 거짓, 최대시간초: 5, 연결시간초: 1, 재시도: 0,
+            헤더: {"Content-Type":"application/json"},
+            본문: 자료문자열화({text: "c" + 문자열(k)})
+        });
+        배열추가(cTasks, t);
+        k = k + 1;
+    }
+}
+
+동안 (변수 s2 = 0; s2 < 30; s2 = s2 + 1) {
+    req = 대기최대(비동기요청받기(server), 5000);
+    res = handle(req);
+    응답보내기(req.연결, res.status, res.body, {"Content-Type":"application/json"});
+    연결닫기(req.연결);
+}
+동안 (변수 i4 = 0; i4 < 길이(cTasks); i4 = i4 + 1) {
+    rp = 대기최대(cTasks[i4], 5000);
+    단언(rp.상태 == 201, "댓글 생성 상태 실패");
+}
+
+// 3) 짝수 id 삭제 5개
+변수 dTasks = [];
+동안 (변수 i5 = 0; i5 < 길이(ids); i5 = i5 + 1) {
+    만약 (ids[i5] % 2 == 0) {
+        배열추가(dTasks, 비동기가져오기요청("http://127.0.0.1:19150/posts/" + 문자열(ids[i5]), {
+            메서드: "DELETE", 로컬차단: 거짓, 최대시간초: 5, 연결시간초: 1, 재시도: 0
+        }));
+    }
+}
+동안 (변수 s3 = 0; s3 < 5; s3 = s3 + 1) {
+    req = 대기최대(비동기요청받기(server), 5000);
+    res = handle(req);
+    응답보내기(req.연결, res.status, res.body, {"Content-Type":"application/json"});
+    연결닫기(req.연결);
+}
+동안 (변수 i6 = 0; i6 < 길이(dTasks); i6 = i6 + 1) {
+    rp = 대기최대(dTasks[i6], 5000);
+    단언(rp.상태 == 200, "삭제 상태 실패");
+}
+
+// 4) 최종 stats
+변수 tStats = 비동기가져오기요청("http://127.0.0.1:19150/stats", {
+    메서드: "GET", 로컬차단: 거짓, 최대시간초: 5, 연결시간초: 1, 재시도: 0
+});
+req = 대기최대(비동기요청받기(server), 5000);
+res = handle(req);
+응답보내기(req.연결, res.status, res.body, {"Content-Type":"application/json"});
+연결닫기(req.연결);
+변수 rStats = 대기최대(tStats, 5000);
+변수 stats = 응답자료(rStats);
+
+단언(stats.posts == 5, "최종 post 개수 실패");
+단언(stats.comments == 15, "최종 comment 개수 실패");
+단언(연결닫기(server), "서버 닫기 실패");

@@ -1,0 +1,2 @@
+파일쓰기("edge_file_as_dir.tmp", "x");
+디렉토리생성("edge_file_as_dir.tmp");

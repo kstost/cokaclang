@@ -1,0 +1,3 @@
+변수 svc = 모듈가져오기("../runtime_tests/modules/complex/post_service.mod");
+변수 add = svc.누적기(100);
+출력 add(1);

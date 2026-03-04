@@ -1,0 +1,13 @@
+변수 probe = "modules/cache_count.txt";
+만약 (파일존재(probe)) {
+    파일삭제(probe);
+}
+
+변수 a = 모듈가져오기("modules/cache_probe.mod");
+변수 b = 모듈가져오기("modules/cache_probe.mod");
+
+단언(a.실행횟수 == 1, "첫 모듈 실행횟수 실패");
+단언(b.실행횟수 == 1, "모듈 캐시 실패");
+단언(숫자(파일읽기(probe)) == 1, "캐시 파일 값 실패");
+
+파일삭제(probe);

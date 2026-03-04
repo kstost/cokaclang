@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cokac 게시판</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="상단바">
+    <div class="상단바__안쪽">
+      <h1>cokac 게시판</h1>
+      <nav>
+        <button id="목록탭버튼" class="탭활성">게시글 목록</button>
+        <button id="글쓰기탭버튼">글쓰기</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="레이아웃">
+    <section id="목록화면" class="카드">
+      <div class="도구줄">
+        <input id="검색어" placeholder="제목/내용/작성자 검색" />
+        <select id="상태필터">
+          <option value="">전체 상태</option>
+          <option value="게시">게시</option>
+          <option value="임시">임시</option>
+        </select>
+        <button id="검색버튼">검색</button>
+      </div>
+
+      <div class="표영역">
+        <table>
+          <thead>
+            <tr>
+              <th>번호</th>
+              <th>제목</th>
+              <th>작성자</th>
+              <th>상태</th>
+              <th>조회수</th>
+              <th>좋아요</th>
+              <th>수정일</th>
+            </tr>
+          </thead>
+          <tbody id="게시글표본문"></tbody>
+        </table>
+      </div>
+
+      <div class="페이지네이션">
+        <button id="이전페이지버튼">이전</button>
+        <span id="페이지정보">1 / 1</span>
+        <button id="다음페이지버튼">다음</button>
+      </div>
+    </section>
+
+    <section id="상세화면" class="카드 숨김">
+      <div class="상세상단">
+        <h2 id="상세제목">게시글</h2>
+        <div class="행버튼">
+          <button id="좋아요버튼">좋아요</button>
+          <button id="수정모드버튼">수정</button>
+          <button id="삭제버튼" class="위험">삭제</button>
+          <button id="목록복귀버튼">목록</button>
+        </div>
+      </div>
+      <div id="상세메타" class="메타"></div>
+      <article id="상세내용" class="본문"></article>
+      <div id="상세태그" class="태그영역"></div>
+    </section>
+
+    <section id="작성화면" class="카드 숨김">
+      <h2 id="폼제목">글쓰기</h2>
+      <div class="폼그리드">
+        <label>제목<input id="입력제목" /></label>
+        <label>작성자<input id="입력작성자" /></label>
+        <label>상태
+          <select id="입력상태">
+            <option value="게시">게시</option>
+            <option value="임시">임시</option>
+          </select>
+        </label>
+        <label>태그(쉼표 구분)<input id="입력태그" /></label>
+        <label class="전체폭">내용<textarea id="입력내용" rows="12"></textarea></label>
+      </div>
+      <div class="행버튼">
+        <button id="저장버튼">저장</button>
+        <button id="취소버튼">취소</button>
+      </div>
+    </section>
+
+    <section class="카드 상태카드">
+      <div id="상태문구">로딩 중...</div>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>

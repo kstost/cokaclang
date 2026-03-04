@@ -1,0 +1,12 @@
+변수 A1 = 모듈가져오기("modules/complex/layers/layer_a.mod");
+변수 A2 = 모듈가져오기("modules/complex/layers/layer_a.mod");
+
+단언(A1.calc(3, 4) == 19, "다층 모듈 calc 실패");
+단언(A1.calc(5, 6) == A2.calc(5, 6), "다층 모듈 캐시 일관성 실패");
+
+변수 c1 = A1.counter(10);
+단언(c1(1) == 11, "다층 모듈 클로저 1 실패");
+단언(c1(5) == 16, "다층 모듈 클로저 2 실패");
+
+변수 c2 = A1.counter(0);
+단언(c2(2) == 2 그리고 c2(3) == 5, "다층 모듈 클로저 독립 실패");

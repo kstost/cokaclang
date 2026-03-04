@@ -1,0 +1,50 @@
+{
+  "name": "cokac-language",
+  "displayName": "COKAC Language Support",
+  "description": "Syntax highlighting and basic editor support for COKAC language.",
+  "version": "0.1.0",
+  "publisher": "cokac",
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "cokac",
+    "korean",
+    "language"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "cokac",
+        "aliases": [
+          "COKAC",
+          "cokac"
+        ],
+        "extensions": [
+          ".cokac"
+        ],
+        "filenamePatterns": [
+          "*.mod.cokac"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cokac",
+        "scopeName": "source.cokac",
+        "path": "./syntaxes/cokac.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "cokac",
+        "path": "./snippets/cokac.code-snippets"
+      }
+    ]
+  }
+}

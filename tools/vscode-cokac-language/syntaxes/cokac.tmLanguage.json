@@ -1,0 +1,115 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "COKAC",
+  "scopeName": "source.cokac",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#functionDeclaration" },
+    { "include": "#controlKeywords" },
+    { "include": "#constants" },
+    { "include": "#builtins" },
+    { "include": "#numbers" },
+    { "include": "#operators" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.number-sign.cokac", "match": "#.*$" },
+        { "name": "comment.line.double-slash.cokac", "match": "//.*$" },
+        {
+          "name": "comment.block.cokac",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.cokac",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "name": "constant.character.escape.cokac", "match": "\\\\[nrt\\\"\\\\]" }
+          ]
+        }
+      ]
+    },
+    "functionDeclaration": {
+      "patterns": [
+        {
+          "match": "\\b(함수)\\s+([_\\p{L}][\\p{L}\\p{N}_]*)",
+          "captures": {
+            "1": { "name": "storage.type.function.cokac" },
+            "2": { "name": "entity.name.function.cokac" }
+          }
+        }
+      ]
+    },
+    "controlKeywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.cokac",
+          "match": "\\b(변수|상수|만약|아니면|반복|동안|중단|계속|반환|시도|잡기|마침|던지기|가져오기|별칭|비동기|대기|출력)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.cokac",
+          "match": "\\b(참|거짓|없음)\\b"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.cokac",
+          "match": "\\b(단언|타입|길이|문자열|숫자|정수|불린|자료파싱|자료문자열화|자료읽기|자료쓰기|파일읽기|파일쓰기|파일존재|서버열기|요청받기|응답보내기|연결닫기|명령실행|명령실행결과|현재시간|시간문자열|내보내기|모듈가져오기|객체설정|객체삭제|배열추가|배열삭제|배열정렬|문자분할|문자포함|문자다듬기)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.cokac",
+          "match": "\\b\\d+(?:\\.\\d+)?\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.logical.cokac",
+          "match": "\\b(그리고|또는)\\b|&&|\\|\\|"
+        },
+        {
+          "name": "keyword.operator.comparison.cokac",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.assignment.cokac",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.arithmetic.cokac",
+          "match": "[+\\-*/%]"
+        },
+        {
+          "name": "keyword.operator.unary.cokac",
+          "match": "!"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        { "name": "punctuation.separator.cokac", "match": "[,;:]" },
+        { "name": "punctuation.accessor.dot.cokac", "match": "\\." },
+        { "name": "punctuation.bracket.cokac", "match": "[(){}\\[\\]]" }
+      ]
+    }
+  }
+}

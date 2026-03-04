@@ -49,6 +49,7 @@ cp website/index.html .
 cp website/style.css .
 cp website/app.bundle.js .
 cp -r website/pkg .
+rm -f pkg/.gitignore
 
 echo "=== 빌드 완료 ==="
 echo "로컬 테스트: cd website && python3 -m http.server 8080"

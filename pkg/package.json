@@ -1,0 +1,15 @@
+{
+  "name": "cokaclang",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "cokaclang_bg.wasm",
+    "cokaclang.js",
+    "cokaclang.d.ts"
+  ],
+  "main": "cokaclang.js",
+  "types": "cokaclang.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

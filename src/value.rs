@@ -10,7 +10,7 @@ pub enum Value {
     Number(f64),
     Bool(bool),
     String(String),
-    Function(FunctionValue),
+    Function(Rc<FunctionValue>),
     Array(Rc<RefCell<ArrayValue>>),
     Object(Rc<RefCell<ObjectValue>>),
     Task(Rc<RefCell<TaskValue>>),
@@ -187,7 +187,7 @@ impl Value {
         Rc::new(RefCell::new(TaskValue::new()))
     }
     pub fn make_function(name: String, params: Vec<String>, body: StmtId, is_async: bool) -> Self {
-        Value::Function(FunctionValue {
+        Value::Function(Rc::new(FunctionValue {
             name,
             params,
             body,
@@ -195,10 +195,10 @@ impl Value {
             is_async,
             arena_index: 0,
             closure_env: None,
-        })
+        }))
     }
     pub fn make_function_with_arena(name: String, params: Vec<String>, body: StmtId, is_async: bool, arena_index: usize) -> Self {
-        Value::Function(FunctionValue {
+        Value::Function(Rc::new(FunctionValue {
             name,
             params,
             body,
@@ -206,10 +206,10 @@ impl Value {
             is_async,
             arena_index,
             closure_env: None,
-        })
+        }))
     }
     pub fn make_builtin(name: String) -> Self {
-        Value::Function(FunctionValue {
+        Value::Function(Rc::new(FunctionValue {
             name,
             params: Vec::new(),
             body: 0,
@@ -217,7 +217,7 @@ impl Value {
             is_async: false,
             arena_index: 0,
             closure_env: None,
-        })
+        }))
     }
 
     pub fn is_truthy(&self) -> bool {
@@ -243,7 +243,7 @@ impl Value {
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Nil, Value::Nil) => true,
             (Value::Function(a), Value::Function(b)) => {
-                if a.is_builtin && b.is_builtin {
+                Rc::ptr_eq(a, b) || if a.is_builtin && b.is_builtin {
                     a.name == b.name
                 } else {
                     a.body == b.body && a.name == b.name

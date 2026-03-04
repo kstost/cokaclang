@@ -28,6 +28,9 @@ pub struct Runtime {
     pub current_arena_index: usize, // 0 = main, N = loaded_arenas[N-1]
     pub modules: Vec<ModuleEntry>,
     pub call_stack: Vec<(String, i32)>,
+    call_name_pool: Vec<String>,
+    pub env_pool: Vec<Box<Environment>>,
+    pub param_name_pool: Vec<String>,
     pub current_exports: Option<Rc<RefCell<ObjectValue>>>,
     pub current_file: Option<String>,
     pub script_argc: usize,
@@ -120,6 +123,9 @@ impl Runtime {
             current_arena_index: 0,
             modules: Vec::new(),
             call_stack: Vec::new(),
+            call_name_pool: Vec::new(),
+            env_pool: Vec::new(),
+            param_name_pool: Vec::new(),
             current_exports: None,
             current_file: None,
             script_argc: 0,
@@ -182,11 +188,16 @@ impl Runtime {
     }
 
     pub fn call_push(&mut self, name: &str, line: i32) {
-        self.call_stack.push((name.to_string(), line));
+        let mut s = self.call_name_pool.pop().unwrap_or_default();
+        s.clear();
+        s.push_str(name);
+        self.call_stack.push((s, line));
     }
 
     pub fn call_pop(&mut self) {
-        self.call_stack.pop();
+        if let Some((s, _)) = self.call_stack.pop() {
+            self.call_name_pool.push(s);
+        }
     }
 
     pub fn build_stack_trace(&self) -> Vec<String> {

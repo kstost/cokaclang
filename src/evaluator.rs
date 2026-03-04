@@ -122,7 +122,8 @@ impl<'a> Evaluator<'a> {
                 0,
             ));
         }
-        let stmt = arena.get_stmt(stmt_id).clone();
+        let stmt = arena.get_stmt(stmt_id);
+        let line = stmt.line;
         self.stmt_depth += 1;
         if self.stmt_depth > self.max_stmt_depth {
             self.stmt_depth -= 1;
@@ -131,44 +132,44 @@ impl<'a> Evaluator<'a> {
                     "실행 깊이 제한({})을 초과했습니다. 재귀 또는 중첩 블록을 줄이거나 COKAC_MAX_EVAL_STMT_DEPTH 값을 조정하세요.",
                     self.max_stmt_depth
                 ),
-                stmt.line,
+                line,
             ));
         }
         let _stmt_depth_guard = DepthGuard::new(&mut self.stmt_depth);
 
-        match stmt.kind {
-            StmtKind::Let { ref name, initializer, is_const } => {
-                let val = self.eval_expr(initializer, arena, env)?;
-                env.define(name.clone(), val, is_const).map_err(|msg| {
-                    CokacError::new(msg, stmt.line)
+        match &stmt.kind {
+            StmtKind::Let { name, initializer, is_const } => {
+                let val = self.eval_expr(*initializer, arena, env)?;
+                env.define(name.clone(), val, *is_const).map_err(|msg| {
+                    CokacError::new(msg, line)
                 })?;
                 Ok(ExecSignal::Normal)
             }
-            StmtKind::Assign { ref name, value } => {
-                let val = self.eval_expr(value, arena, env)?;
+            StmtKind::Assign { name, value } => {
+                let val = self.eval_expr(*value, arena, env)?;
                 match env.assign(name, val) {
                     Ok(true) => Ok(ExecSignal::Normal),
                     Ok(false) => Err(CokacError::new(
                         format!("정의되지 않은 변수: '{}'", name),
-                        stmt.line,
+                        line,
                     )),
-                    Err(msg) => Err(CokacError::new(msg, stmt.line)),
+                    Err(msg) => Err(CokacError::new(msg, line)),
                 }
             }
             StmtKind::IndexAssign { target, index, value } => {
-                let val = self.eval_expr(value, arena, env)?;
-                let target_val = self.eval_expr(target, arena, env)?;
-                let idx_val = self.eval_expr(index, arena, env)?;
+                let val = self.eval_expr(*value, arena, env)?;
+                let target_val = self.eval_expr(*target, arena, env)?;
+                let idx_val = self.eval_expr(*index, arena, env)?;
                 match target_val {
                     Value::Array(arr) => {
                         let mut arr = arr.borrow_mut();
                         if arr.frozen {
                             return Err(CokacError::new(
                                 "불변 배열에 값을 설정할 수 없습니다.".to_string(),
-                                stmt.line,
+                                line,
                             ));
                         }
-                        let idx = value_to_index(&idx_val, arr.items.len(), false, stmt.line)?;
+                        let idx = value_to_index(&idx_val, arr.items.len(), false, line)?;
                         arr.items[idx] = val;
                     }
                     Value::Object(obj) => {
@@ -176,7 +177,7 @@ impl<'a> Evaluator<'a> {
                         if obj.frozen {
                             return Err(CokacError::new(
                                 "불변 객체에 값을 설정할 수 없습니다.".to_string(),
-                                stmt.line,
+                                line,
                             ));
                         }
                         let key = match idx_val {
@@ -188,22 +189,22 @@ impl<'a> Evaluator<'a> {
                     _ => {
                         return Err(CokacError::new(
                             "인덱스 대입은 배열 또는 객체에만 가능합니다.".to_string(),
-                            stmt.line,
+                            line,
                         ));
                     }
                 }
                 Ok(ExecSignal::Normal)
             }
-            StmtKind::PropertyAssign { target, ref name, value } => {
-                let val = self.eval_expr(value, arena, env)?;
-                let target_val = self.eval_expr(target, arena, env)?;
+            StmtKind::PropertyAssign { target, name, value } => {
+                let val = self.eval_expr(*value, arena, env)?;
+                let target_val = self.eval_expr(*target, arena, env)?;
                 match target_val {
                     Value::Object(obj) => {
                         let mut obj = obj.borrow_mut();
                         if obj.frozen {
                             return Err(CokacError::new(
                                 "불변 객체에 값을 설정할 수 없습니다.".to_string(),
-                                stmt.line,
+                                line,
                             ));
                         }
                         obj.set(name.clone(), val);
@@ -211,14 +212,14 @@ impl<'a> Evaluator<'a> {
                     _ => {
                         return Err(CokacError::new(
                             format!("'{}' 속성을 설정할 수 없습니다. 객체가 아닙니다.", name),
-                            stmt.line,
+                            line,
                         ));
                     }
                 }
                 Ok(ExecSignal::Normal)
             }
             StmtKind::Print(expr) => {
-                let val = self.eval_expr(expr, arena, env)?;
+                let val = self.eval_expr(*expr, arena, env)?;
                 #[cfg(target_arch = "wasm32")]
                 {
                     crate::output::capture_write(&format!("{}\n", val.to_display_string()));
@@ -230,16 +231,18 @@ impl<'a> Evaluator<'a> {
                 Ok(ExecSignal::Normal)
             }
             StmtKind::If { condition, then_branch, else_branch } => {
-                let cond = self.eval_expr(condition, arena, env)?;
+                let cond = self.eval_expr(*condition, arena, env)?;
                 if cond.is_truthy() {
-                    self.exec_stmt(then_branch, arena, env)
-                } else if let Some(else_b) = else_branch {
+                    self.exec_stmt(*then_branch, arena, env)
+                } else if let Some(else_b) = *else_branch {
                     self.exec_stmt(else_b, arena, env)
                 } else {
                     Ok(ExecSignal::Normal)
                 }
             }
             StmtKind::While { condition, body } => {
+                let condition = *condition;
+                let body = *body;
                 env.loop_depth += 1;
                 loop {
                     let cond = self.eval_expr(condition, arena, env)?;
@@ -261,6 +264,10 @@ impl<'a> Evaluator<'a> {
                 Ok(ExecSignal::Normal)
             }
             StmtKind::For { initializer, condition, increment, body } => {
+                let initializer = *initializer;
+                let condition = *condition;
+                let increment = *increment;
+                let body = *body;
                 if let Some(init) = initializer {
                     self.exec_stmt(init, arena, env)?;
                 }
@@ -288,7 +295,9 @@ impl<'a> Evaluator<'a> {
                 env.loop_depth -= 1;
                 Ok(ExecSignal::Normal)
             }
-            StmtKind::Function { ref name, ref params, body, is_async } => {
+            StmtKind::Function { name, params, body, is_async } => {
+                let body = *body;
+                let is_async = *is_async;
                 let arena_index = self.resolve_arena_index_for(arena);
                 self.runtime.register_function(
                     name.clone(),
@@ -307,7 +316,7 @@ impl<'a> Evaluator<'a> {
                 } else {
                     None
                 };
-                let fn_val = Value::Function(FunctionValue {
+                let fn_val = Value::Function(Rc::new(FunctionValue {
                     name: name.clone(),
                     params: params.clone(),
                     body,
@@ -315,41 +324,46 @@ impl<'a> Evaluator<'a> {
                     is_async,
                     arena_index,
                     closure_env,
-                });
+                }));
                 match env.assign(name, fn_val.clone()) {
                     Ok(true) => {}
                     Ok(false) => {
                         env.define(name.clone(), fn_val, false).map_err(|msg| {
-                            CokacError::new(msg, stmt.line)
+                            CokacError::new(msg, line)
                         })?;
                     }
-                    Err(msg) => return Err(CokacError::new(msg, stmt.line)),
+                    Err(msg) => return Err(CokacError::new(msg, line)),
                 }
                 Ok(ExecSignal::Normal)
             }
             StmtKind::Return { value } => {
-                let val = if let Some(expr) = value {
+                let val = if let Some(expr) = *value {
                     self.eval_expr(expr, arena, env)?
                 } else {
                     Value::Nil
                 };
                 Ok(ExecSignal::Return(val))
             }
-            StmtKind::Import { ref path, ref alias } => {
+            StmtKind::Import { path, alias } => {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    self.exec_import(path, alias.as_deref(), arena, env, stmt.line)
+                    self.exec_import(path, alias.as_deref(), arena, env, line)
                 }
                 #[cfg(target_arch = "wasm32")]
                 {
                     let _ = (path, alias);
                     Err(CokacError::new(
                         "WASM 환경에서는 모듈 가져오기를 사용할 수 없습니다.".to_string(),
-                        stmt.line,
+                        line,
                     ))
                 }
             }
-            StmtKind::Try { try_block, catch_block, ref error_name, ref error_info_name, finally_block } => {
+            StmtKind::Try { try_block, catch_block, error_name, error_info_name, finally_block } => {
+                let try_block = *try_block;
+                let catch_block = *catch_block;
+                let finally_block = *finally_block;
+                let error_name = error_name.clone();
+                let error_info_name = error_info_name.clone();
                 let try_result = self.exec_stmt(try_block, arena, env);
                 let (signal, caught_error) = match try_result {
                     Ok(signal) => (signal, None),
@@ -409,19 +423,18 @@ impl<'a> Evaluator<'a> {
                 Ok(signal)
             }
             StmtKind::Throw(expr) => {
-                let val = self.eval_expr(expr, arena, env)?;
+                let val = self.eval_expr(*expr, arena, env)?;
                 let msg = val.to_display_string();
-                Err(CokacError::new(msg, stmt.line).with_stack(self.runtime.build_stack_trace()))
+                Err(CokacError::new(msg, line).with_stack(self.runtime.build_stack_trace()))
             }
-            StmtKind::Block(ref stmts_list) => {
-                let stmts_clone = stmts_list.clone();
-                self.exec_stmts(&stmts_clone, arena, env)
+            StmtKind::Block(stmts_list) => {
+                self.exec_stmts(stmts_list, arena, env)
             }
             StmtKind::Break => {
                 if env.loop_depth <= 0 {
                     return Err(CokacError::new(
                         "'중단'은 반복문 안에서만 사용할 수 있습니다.".to_string(),
-                        stmt.line,
+                        line,
                     ));
                 }
                 Ok(ExecSignal::Break)
@@ -430,13 +443,13 @@ impl<'a> Evaluator<'a> {
                 if env.loop_depth <= 0 {
                     return Err(CokacError::new(
                         "'계속'은 반복문 안에서만 사용할 수 있습니다.".to_string(),
-                        stmt.line,
+                        line,
                     ));
                 }
                 Ok(ExecSignal::Continue)
             }
             StmtKind::Expr(expr) => {
-                self.eval_expr(expr, arena, env)?;
+                self.eval_expr(*expr, arena, env)?;
                 Ok(ExecSignal::Normal)
             }
         }
@@ -458,7 +471,8 @@ impl<'a> Evaluator<'a> {
                 0,
             ));
         }
-        let expr = arena.get_expr(expr_id).clone();
+        let expr = arena.get_expr(expr_id);
+        let line = expr.line;
         self.expr_depth += 1;
         if self.expr_depth > self.max_expr_depth {
             self.expr_depth -= 1;
@@ -467,35 +481,40 @@ impl<'a> Evaluator<'a> {
                     "표현식 깊이 제한({})을 초과했습니다. 괄호/중첩 표현식을 줄이거나 COKAC_MAX_EVAL_EXPR_DEPTH 값을 조정하세요.",
                     self.max_expr_depth
                 ),
-                expr.line,
+                line,
             ));
         }
         let _expr_depth_guard = DepthGuard::new(&mut self.expr_depth);
 
-        match expr.kind {
-            ExprKind::Literal(ref val) => {
+        match &expr.kind {
+            ExprKind::Literal(val) => {
                 match val {
                     // Anonymous function expressions are parsed as literal function values.
                     // They must be bound to the current arena and capture lexical scope,
                     // otherwise module-scoped methods can execute against the wrong arena.
                     Value::Function(f) if !f.is_builtin => {
-                        let mut bound = f.clone();
-                        if bound.arena_index == 0 {
-                            bound.arena_index = self.resolve_arena_index_for(arena);
-                        }
-                        if bound.closure_env.is_none()
+                        let needs_arena = f.arena_index == 0;
+                        let needs_closure = f.closure_env.is_none()
                             && (env.parent.is_some()
                                 || self.runtime.current_exports.is_some()
-                                || self.runtime.current_arena_index == 1)
-                        {
-                            bound.closure_env = Some(Rc::new(RefCell::new(env.clone())));
+                                || self.runtime.current_arena_index == 1);
+                        if needs_arena || needs_closure {
+                            let mut bound = (**f).clone();
+                            if needs_arena {
+                                bound.arena_index = self.resolve_arena_index_for(arena);
+                            }
+                            if needs_closure {
+                                bound.closure_env = Some(Rc::new(RefCell::new(env.clone())));
+                            }
+                            Ok(Value::Function(Rc::new(bound)))
+                        } else {
+                            Ok(Value::Function(f.clone()))
                         }
-                        Ok(Value::Function(bound))
                     }
                     _ => Ok(val.clone()),
                 }
             },
-            ExprKind::Variable(ref name) => {
+            ExprKind::Variable(name) => {
                 if let Some(val) = env.get(name) {
                     return Ok(val);
                 }
@@ -513,15 +532,15 @@ impl<'a> Evaluator<'a> {
                 }
                 Err(CokacError::new(
                     format!("정의되지 않은 변수: '{}'", name),
-                    expr.line,
+                    line,
                 ))
             }
-            ExprKind::Grouping(inner) => self.eval_expr(inner, arena, env),
+            ExprKind::Grouping(inner) => self.eval_expr(*inner, arena, env),
             ExprKind::Unary { op, right } => {
-                let val = self.eval_expr(right, arena, env)?;
+                let val = self.eval_expr(*right, arena, env)?;
                 match op {
                     TokenType::Minus => {
-                        let n = value_to_number(&val, expr.line)?;
+                        let n = value_to_number(&val, line)?;
                         Ok(Value::Number(-n))
                     }
                     TokenType::Bang => Ok(Value::Bool(!val.is_truthy())),
@@ -529,25 +548,27 @@ impl<'a> Evaluator<'a> {
                 }
             }
             ExprKind::Binary { op, left, right } => {
-                self.eval_binary(op, left, right, arena, env, expr.line)
+                self.eval_binary(*op, *left, *right, arena, env, line)
             }
-            ExprKind::Call { callee, ref args } => {
+            ExprKind::Call { callee, args } => {
+                let callee = *callee;
                 // OOP direct method call sugar: 인스턴스.메서드(...)
                 // Class methods receive implicit self as the first argument.
-                if let ExprKind::Property { target, ref name } = arena.get_expr(callee).kind.clone() {
+                if let ExprKind::Property { target, name } = &arena.get_expr(callee).kind {
+                    let target = *target;
+                    let name = name.clone();
                     let target_val = self.eval_expr(target, arena, env)?;
                     if let Value::Object(obj) = &target_val {
                         let own_callable = {
                             let borrowed = obj.borrow();
-                            borrowed.get(name).cloned()
+                            borrowed.get(&name).cloned()
                         };
                         if let Some(own_callable) = own_callable {
-                            let args_clone = args.clone();
-                            let mut arg_vals = Vec::with_capacity(args_clone.len());
-                            for &arg in &args_clone {
+                            let mut arg_vals = Vec::with_capacity(args.len());
+                            for &arg in args.iter() {
                                 arg_vals.push(self.eval_expr(arg, arena, env)?);
                             }
-                            return self.invoke_callable(own_callable, arg_vals, arena, env, expr.line);
+                            return self.invoke_callable(own_callable, arg_vals, arena, env, line);
                         }
 
                         let class_val = {
@@ -555,62 +576,57 @@ impl<'a> Evaluator<'a> {
                             borrowed.get("__클래스").cloned()
                         };
                         if let Some(class_obj) = class_val {
-                            if let Some(method_callable) = find_method_in_class_chain(&class_obj, name) {
-                                let args_clone = args.clone();
-                                let mut arg_vals = Vec::with_capacity(args_clone.len() + 1);
+                            if let Some(method_callable) = find_method_in_class_chain(&class_obj, &name) {
+                                let mut arg_vals = Vec::with_capacity(args.len() + 1);
                                 arg_vals.push(target_val.clone());
-                                for &arg in &args_clone {
+                                for &arg in args.iter() {
                                     arg_vals.push(self.eval_expr(arg, arena, env)?);
                                 }
-                                return self.invoke_callable(method_callable, arg_vals, arena, env, expr.line);
+                                return self.invoke_callable(method_callable, arg_vals, arena, env, line);
                             }
                         }
                     }
                 }
 
                 let callee_val = self.eval_expr(callee, arena, env)?;
-                let args_clone = args.clone();
-                let mut arg_vals = Vec::with_capacity(args_clone.len());
-                for &arg in &args_clone {
+                let mut arg_vals = Vec::with_capacity(args.len());
+                for &arg in args.iter() {
                     arg_vals.push(self.eval_expr(arg, arena, env)?);
                 }
-                self.invoke_callable(callee_val, arg_vals, arena, env, expr.line)
+                self.invoke_callable(callee_val, arg_vals, arena, env, line)
             }
             ExprKind::Await(inner) => {
-                let val = self.eval_expr(inner, arena, env)?;
+                let val = self.eval_expr(*inner, arena, env)?;
                 match val {
                     Value::Task(task) => {
-                        self.await_task(task, arena, env, expr.line)
+                        self.await_task(task, arena, env, line)
                     }
                     other => Ok(other),
                 }
             }
-            ExprKind::Array(ref items) => {
-                let items_clone = items.clone();
-                let mut vals = Vec::with_capacity(items_clone.len());
-                for &item in &items_clone {
+            ExprKind::Array(items) => {
+                let mut vals = Vec::with_capacity(items.len());
+                for &item in items.iter() {
                     vals.push(self.eval_expr(item, arena, env)?);
                 }
                 Ok(Value::new_array(vals))
             }
-            ExprKind::Object { ref keys, ref values } => {
-                let keys_clone = keys.clone();
-                let values_clone = values.clone();
+            ExprKind::Object { keys, values } => {
                 let obj = crate::value::ObjectValue::new();
                 let obj = Rc::new(RefCell::new(obj));
-                for (key, &val_id) in keys_clone.iter().zip(values_clone.iter()) {
+                for (key, &val_id) in keys.iter().zip(values.iter()) {
                     let val = self.eval_expr(val_id, arena, env)?;
                     obj.borrow_mut().set(key.clone(), val);
                 }
                 Ok(Value::Object(obj))
             }
             ExprKind::Index { target, index } => {
-                let target_val = self.eval_expr(target, arena, env)?;
-                let idx_val = self.eval_expr(index, arena, env)?;
+                let target_val = self.eval_expr(*target, arena, env)?;
+                let idx_val = self.eval_expr(*index, arena, env)?;
                 match target_val {
                     Value::Array(arr) => {
                         let arr = arr.borrow();
-                        let idx = value_to_index(&idx_val, arr.items.len(), false, expr.line)?;
+                        let idx = value_to_index(&idx_val, arr.items.len(), false, line)?;
                         Ok(arr.items[idx].clone())
                     }
                     Value::Object(obj) => {
@@ -625,18 +641,18 @@ impl<'a> Evaluator<'a> {
                         }
                     }
                     Value::String(s) => {
-                        let idx = value_to_index(&idx_val, s.len(), false, expr.line)?;
+                        let idx = value_to_index(&idx_val, s.len(), false, line)?;
                         let ch = s.as_bytes().get(idx).map(|&b| (b as char).to_string()).unwrap_or_default();
                         Ok(Value::String(ch))
                     }
                     _ => Err(CokacError::new(
                         "인덱스 접근은 배열, 객체 또는 문자열에만 가능합니다.".to_string(),
-                        expr.line,
+                        line,
                     )),
                 }
             }
-            ExprKind::Property { target, ref name } => {
-                let target_val = self.eval_expr(target, arena, env)?;
+            ExprKind::Property { target, name } => {
+                let target_val = self.eval_expr(*target, arena, env)?;
                 match target_val {
                     Value::Object(obj) => {
                         let obj = obj.borrow();
@@ -647,7 +663,7 @@ impl<'a> Evaluator<'a> {
                     }
                     _ => Err(CokacError::new(
                         format!("'{}' 속성에 접근할 수 없습니다. 객체가 아닙니다.", name),
-                        expr.line,
+                        line,
                     )),
                 }
             }
@@ -685,58 +701,117 @@ impl<'a> Evaluator<'a> {
             TokenType::Plus => {
                 match (&left, &right) {
                     (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a + b)),
+                    (Value::String(a), Value::String(b)) => {
+                        let mut result = String::with_capacity(a.len() + b.len());
+                        result.push_str(a);
+                        result.push_str(b);
+                        Ok(Value::String(result))
+                    }
                     _ => {
                         let ls = left.to_display_string();
                         let rs = right.to_display_string();
-                        Ok(Value::String(format!("{}{}", ls, rs)))
+                        let mut result = String::with_capacity(ls.len() + rs.len());
+                        result.push_str(&ls);
+                        result.push_str(&rs);
+                        Ok(Value::String(result))
                     }
                 }
             }
             TokenType::Minus => {
-                let a = value_to_number(&left, line)?;
-                let b = value_to_number(&right, line)?;
-                Ok(Value::Number(a - b))
+                match (&left, &right) {
+                    (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a - b)),
+                    _ => {
+                        let a = value_to_number(&left, line)?;
+                        let b = value_to_number(&right, line)?;
+                        Ok(Value::Number(a - b))
+                    }
+                }
             }
             TokenType::Star => {
-                let a = value_to_number(&left, line)?;
-                let b = value_to_number(&right, line)?;
-                Ok(Value::Number(a * b))
+                match (&left, &right) {
+                    (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a * b)),
+                    _ => {
+                        let a = value_to_number(&left, line)?;
+                        let b = value_to_number(&right, line)?;
+                        Ok(Value::Number(a * b))
+                    }
+                }
             }
             TokenType::Slash => {
-                let a = value_to_number(&left, line)?;
-                let b = value_to_number(&right, line)?;
-                if b.abs() < 1e-12 {
-                    return Err(CokacError::new("0으로 나눌 수 없습니다.".to_string(), line));
+                match (&left, &right) {
+                    (Value::Number(a), Value::Number(b)) => {
+                        if b.abs() < 1e-12 {
+                            return Err(CokacError::new("0으로 나눌 수 없습니다.".to_string(), line));
+                        }
+                        Ok(Value::Number(a / b))
+                    }
+                    _ => {
+                        let a = value_to_number(&left, line)?;
+                        let b = value_to_number(&right, line)?;
+                        if b.abs() < 1e-12 {
+                            return Err(CokacError::new("0으로 나눌 수 없습니다.".to_string(), line));
+                        }
+                        Ok(Value::Number(a / b))
+                    }
                 }
-                Ok(Value::Number(a / b))
             }
             TokenType::Percent => {
-                let a = value_to_number(&left, line)?;
-                let b = value_to_number(&right, line)?;
-                if b.abs() < 1e-12 {
-                    return Err(CokacError::new("0으로 나눌 수 없습니다.".to_string(), line));
+                match (&left, &right) {
+                    (Value::Number(a), Value::Number(b)) => {
+                        if b.abs() < 1e-12 {
+                            return Err(CokacError::new("0으로 나눌 수 없습니다.".to_string(), line));
+                        }
+                        Ok(Value::Number(a % b))
+                    }
+                    _ => {
+                        let a = value_to_number(&left, line)?;
+                        let b = value_to_number(&right, line)?;
+                        if b.abs() < 1e-12 {
+                            return Err(CokacError::new("0으로 나눌 수 없습니다.".to_string(), line));
+                        }
+                        Ok(Value::Number(a % b))
+                    }
                 }
-                Ok(Value::Number(a % b))
             }
             TokenType::Greater => {
-                let a = value_to_number(&left, line)?;
-                let b = value_to_number(&right, line)?;
-                Ok(Value::Bool(a > b))
+                match (&left, &right) {
+                    (Value::Number(a), Value::Number(b)) => Ok(Value::Bool(a > b)),
+                    _ => {
+                        let a = value_to_number(&left, line)?;
+                        let b = value_to_number(&right, line)?;
+                        Ok(Value::Bool(a > b))
+                    }
+                }
             }
             TokenType::GreaterEqual => {
-                let a = value_to_number(&left, line)?;
-                let b = value_to_number(&right, line)?;
-                Ok(Value::Bool(a >= b))
+                match (&left, &right) {
+                    (Value::Number(a), Value::Number(b)) => Ok(Value::Bool(a >= b)),
+                    _ => {
+                        let a = value_to_number(&left, line)?;
+                        let b = value_to_number(&right, line)?;
+                        Ok(Value::Bool(a >= b))
+                    }
+                }
             }
             TokenType::Less => {
-                let a = value_to_number(&left, line)?;
-                let b = value_to_number(&right, line)?;
-                Ok(Value::Bool(a < b))
+                match (&left, &right) {
+                    (Value::Number(a), Value::Number(b)) => Ok(Value::Bool(a < b)),
+                    _ => {
+                        let a = value_to_number(&left, line)?;
+                        let b = value_to_number(&right, line)?;
+                        Ok(Value::Bool(a < b))
+                    }
+                }
             }
             TokenType::LessEqual => {
-                let a = value_to_number(&left, line)?;
-                let b = value_to_number(&right, line)?;
-                Ok(Value::Bool(a <= b))
+                match (&left, &right) {
+                    (Value::Number(a), Value::Number(b)) => Ok(Value::Bool(a <= b)),
+                    _ => {
+                        let a = value_to_number(&left, line)?;
+                        let b = value_to_number(&right, line)?;
+                        Ok(Value::Bool(a <= b))
+                    }
+                }
             }
             TokenType::EqualEqual => Ok(Value::Bool(left.equals(&right))),
             TokenType::BangEqual => Ok(Value::Bool(!left.equals(&right))),
@@ -765,26 +840,18 @@ impl<'a> Evaluator<'a> {
                     );
                 }
 
-                // Extract values before borrowing issues
-                let func_body = func.body;
-                let func_arena_index = func.arena_index;
-                let func_params = func.params.clone();
-                let func_name = if func.name.is_empty() { "익명".to_string() } else { func.name.clone() };
-                let func_is_async = func.is_async;
-                let captured_env_ref = func.closure_env.clone();
-
-                if func_is_async {
+                if func.is_async {
                     let task = Value::new_task();
                     if !self.runtime.try_enqueue_task(&task, line) {
                         return Ok(Value::Task(task));
                     }
-                    let mut func_env = if let Some(captured) = captured_env_ref.clone() {
-                        Environment::with_parent(captured.borrow().clone())
+                    let mut func_env = if let Some(ref captured) = func.closure_env {
+                        Environment::for_function(captured.borrow().clone(), func.params.len())
                     } else {
-                        Environment::with_parent(env.clone())
+                        Environment::for_function(env.clone(), func.params.len())
                     };
                     func_env.function_depth = 1;
-                    for (i, param) in func_params.iter().enumerate() {
+                    for (i, param) in func.params.iter().enumerate() {
                         let val = args.get(i).cloned().unwrap_or(Value::Nil);
                         let _ = func_env.define(param.clone(), val, false);
                     }
@@ -792,60 +859,97 @@ impl<'a> Evaluator<'a> {
                         task: task.clone(),
                         kind: crate::runtime::AsyncJobKind::Function {
                             env: func_env,
-                            body: func_body,
-                            arena_index: func_arena_index,
+                            body: func.body,
+                            arena_index: func.arena_index,
                         },
                     });
                     self.runtime.mark_async_enqueued();
                     return Ok(Value::Task(task));
                 }
 
-                // Captured closures run with lexical parent; normal functions keep existing propagation behavior.
-                let mut func_env = if let Some(captured) = captured_env_ref.clone() {
-                    Environment::with_parent(captured.borrow().clone())
-                } else {
-                    Environment::with_parent(std::mem::replace(env, Environment::new()))
-                };
-                func_env.function_depth = 1;
-                for (i, param) in func_params.iter().enumerate() {
-                    let val = args.get(i).cloned().unwrap_or(Value::Nil);
-                    let _ = func_env.define(param.clone(), val, false);
-                }
+                let body = func.body;
+                let arena_index = func.arena_index;
+                let func_name = if func.name.is_empty() { "익명" } else { &func.name };
 
-                self.runtime.call_push(&func_name, line);
+                if let Some(ref captured) = func.closure_env {
+                    // Closure path: separate func_env, pooled Box
+                    let mut func_env = Environment::for_function_pooled(
+                        captured.borrow().clone(),
+                        func.params.len(),
+                        &mut self.runtime.env_pool,
+                    );
+                    func_env.function_depth = 1;
+                    for (i, param) in func.params.iter().enumerate() {
+                        let val = args.get(i).cloned().unwrap_or(Value::Nil);
+                        let mut name = self.runtime.param_name_pool.pop().unwrap_or_default();
+                        name.clear();
+                        name.push_str(param);
+                        func_env.define_param(name, val);
+                    }
 
-                let result = self.exec_function_body_with_arena(
-                    func_body,
-                    func_arena_index,
-                    arena,
-                    &mut func_env,
-                    line,
-                );
+                    self.runtime.call_push(func_name, line);
+                    let result = self.exec_function_body_with_arena(
+                        body, arena_index, arena, &mut func_env, line,
+                    );
 
-                if let Some(captured) = captured_env_ref {
-                    // Persist captured lexical scope mutations across closure calls.
-                    let parent_after_call = func_env.take_parent().unwrap_or_else(Environment::new);
+                    // Persist captured lexical scope mutations
+                    let parent_after_call = func_env.take_parent_pooled(
+                        &mut self.runtime.env_pool,
+                        &mut self.runtime.param_name_pool,
+                    ).unwrap_or_else(Environment::new);
                     *captured.borrow_mut() = parent_after_call;
-                } else {
-                    // Restore caller environment for normal function calls.
-                    *env = func_env.take_parent().unwrap_or_else(Environment::new);
-                }
 
-                match result {
-                    Ok(ExecSignal::Return(val)) => {
-                        self.runtime.call_pop();
-                        Ok(val)
-                    }
-                    Ok(_) => {
-                        self.runtime.call_pop();
-                        Ok(Value::Nil)
-                    }
-                    Err(mut e) => {
-                        if e.stack.is_empty() {
-                            e.stack = self.runtime.build_stack_trace();
+                    match result {
+                        Ok(ExecSignal::Return(val)) => {
+                            self.runtime.call_pop();
+                            Ok(val)
                         }
-                        self.runtime.call_pop();
-                        Err(e)
+                        Ok(_) => {
+                            self.runtime.call_pop();
+                            Ok(Value::Nil)
+                        }
+                        Err(mut e) => {
+                            if e.stack.is_empty() {
+                                e.stack = self.runtime.build_stack_trace();
+                            }
+                            self.runtime.call_pop();
+                            Err(e)
+                        }
+                    }
+                } else {
+                    // Non-closure path: in-place with pooled Box+Vec (zero alloc after warmup)
+                    env.prepare_call(func.params.len(), &mut self.runtime.env_pool);
+                    env.function_depth = 1;
+                    for (i, param) in func.params.iter().enumerate() {
+                        let val = args.get(i).cloned().unwrap_or(Value::Nil);
+                        let mut name = self.runtime.param_name_pool.pop().unwrap_or_default();
+                        name.clear();
+                        name.push_str(param);
+                        env.define_param(name, val);
+                    }
+
+                    self.runtime.call_push(func_name, line);
+                    let result = self.exec_function_body_with_arena(
+                        body, arena_index, arena, env, line,
+                    );
+                    env.finish_call(&mut self.runtime.env_pool, &mut self.runtime.param_name_pool);
+
+                    match result {
+                        Ok(ExecSignal::Return(val)) => {
+                            self.runtime.call_pop();
+                            Ok(val)
+                        }
+                        Ok(_) => {
+                            self.runtime.call_pop();
+                            Ok(Value::Nil)
+                        }
+                        Err(mut e) => {
+                            if e.stack.is_empty() {
+                                e.stack = self.runtime.build_stack_trace();
+                            }
+                            self.runtime.call_pop();
+                            Err(e)
+                        }
                     }
                 }
             }

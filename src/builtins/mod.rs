@@ -2,17 +2,23 @@ pub mod core;
 pub mod string_ops;
 pub mod array_ops;
 pub mod object_ops;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod file_ops;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod dir_path_ops;
 pub mod json_ops;
 pub mod hash_encoding;
 pub mod time_random;
 pub mod stdio_io;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod process_ops;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod http_client;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod http_server;
 pub mod task_ops;
 pub mod oop;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod module_ops;
 
 use crate::ast::AstArena;
@@ -191,6 +197,14 @@ pub fn is_builtin(name: &str) -> bool {
     BUILTIN_NAMES.contains(&name)
 }
 
+#[cfg(target_arch = "wasm32")]
+fn wasm_unsupported(name: &str, line: i32) -> Result<Value, CokacError> {
+    Err(CokacError::new(
+        format!("WASM 환경에서는 '{}'을(를) 사용할 수 없습니다.", name),
+        line,
+    ))
+}
+
 pub fn call_builtin(
     name: &str,
     args: Vec<Value>,
@@ -259,6 +273,7 @@ pub fn call_builtin(
     }
 
     // File ops
+    #[cfg(not(target_arch = "wasm32"))]
     match name {
         "파일읽기" => return file_ops::builtin_file_read(args, eval.runtime, line),
         "파일읽기줄들" => return file_ops::builtin_file_read_lines(args, eval.runtime, line),
@@ -274,8 +289,16 @@ pub fn call_builtin(
         "파일수정시각" => return file_ops::builtin_file_mtime(args, eval.runtime, line),
         _ => {}
     }
+    #[cfg(target_arch = "wasm32")]
+    match name {
+        "파일읽기" | "파일읽기줄들" | "파일쓰기" | "파일쓰기줄들" | "파일추가" |
+        "파일복사" | "파일이동" | "파일존재" | "파일삭제" | "파일정보" |
+        "파일크기" | "파일수정시각" => return wasm_unsupported(name, line),
+        _ => {}
+    }
 
     // Dir/Path ops
+    #[cfg(not(target_arch = "wasm32"))]
     match name {
         "디렉토리목록" => return dir_path_ops::builtin_dir_list(args, eval.runtime, line),
         "디렉토리생성" => return dir_path_ops::builtin_dir_create(args, eval.runtime, line),
@@ -294,22 +317,50 @@ pub fn call_builtin(
         "경로존재" => return dir_path_ops::builtin_path_exists(args, eval.runtime, line),
         _ => {}
     }
+    #[cfg(target_arch = "wasm32")]
+    match name {
+        "디렉토리목록" | "디렉토리생성" | "디렉토리삭제" | "디렉토리삭제재귀" |
+        "디렉토리복사" | "디렉토리존재" | "현재디렉토리" | "경로합치기" |
+        "절대경로" | "경로이름" | "상위경로" | "확장자" | "경로정규화" |
+        "상대경로" | "경로존재" => return wasm_unsupported(name, line),
+        _ => {}
+    }
 
     // JSON ops
     match name {
         "자료파싱" => return json_ops::builtin_json_parse(args, line),
         "자료문자열화" => return json_ops::builtin_json_stringify(args, line),
         "자료예쁘게문자열화" => return json_ops::builtin_json_stringify_pretty(args, line),
-        "자료읽기" | "자료파일읽기" => return json_ops::builtin_json_read_file(args, eval.runtime, line),
-        "자료쓰기" | "자료파일쓰기" => return json_ops::builtin_json_write_file(args, eval.runtime, line),
-        "자료예쁘게쓰기" | "자료파일예쁘게쓰기" => return json_ops::builtin_json_write_file_pretty(args, eval.runtime, line),
+        "자료읽기" | "자료파일읽기" => {
+            #[cfg(not(target_arch = "wasm32"))]
+            return json_ops::builtin_json_read_file(args, eval.runtime, line);
+            #[cfg(target_arch = "wasm32")]
+            return wasm_unsupported(name, line);
+        }
+        "자료쓰기" | "자료파일쓰기" => {
+            #[cfg(not(target_arch = "wasm32"))]
+            return json_ops::builtin_json_write_file(args, eval.runtime, line);
+            #[cfg(target_arch = "wasm32")]
+            return wasm_unsupported(name, line);
+        }
+        "자료예쁘게쓰기" | "자료파일예쁘게쓰기" => {
+            #[cfg(not(target_arch = "wasm32"))]
+            return json_ops::builtin_json_write_file_pretty(args, eval.runtime, line);
+            #[cfg(target_arch = "wasm32")]
+            return wasm_unsupported(name, line);
+        }
         _ => {}
     }
 
     // Hash/Encoding
     match name {
         "해시문자열" => return hash_encoding::builtin_hash_string(args, line),
-        "해시파일" => return hash_encoding::builtin_hash_file(args, eval.runtime, line),
+        "해시파일" => {
+            #[cfg(not(target_arch = "wasm32"))]
+            return hash_encoding::builtin_hash_file(args, eval.runtime, line);
+            #[cfg(target_arch = "wasm32")]
+            return wasm_unsupported(name, line);
+        }
         "베이스육십사인코드" => return hash_encoding::builtin_base64_encode(args, line),
         "베이스육십사디코드" => return hash_encoding::builtin_base64_decode(args, line),
         _ => {}
@@ -338,6 +389,7 @@ pub fn call_builtin(
     }
 
     // Process ops
+    #[cfg(not(target_arch = "wasm32"))]
     match name {
         "명령실행" => return process_ops::builtin_shell_exec(args, line),
         "명령실행결과" => return process_ops::builtin_shell_exec_full(args, line),
@@ -349,8 +401,15 @@ pub fn call_builtin(
         "환경목록" => return process_ops::builtin_env_list(args, line),
         _ => {}
     }
+    #[cfg(target_arch = "wasm32")]
+    match name {
+        "명령실행" | "명령실행결과" | "인수값" | "인수개수" | "인수목록" |
+        "종료" | "환경" | "환경목록" => return wasm_unsupported(name, line),
+        _ => {}
+    }
 
     // HTTP client
+    #[cfg(not(target_arch = "wasm32"))]
     match name {
         "웹가져오기" => return http_client::builtin_web_get(args, line),
         "웹요청" => return http_client::builtin_web_request(args, line),
@@ -360,13 +419,24 @@ pub fn call_builtin(
         "응답헤더값" => return http_client::builtin_response_header(args, line),
         _ => {}
     }
+    #[cfg(target_arch = "wasm32")]
+    match name {
+        "웹가져오기" | "웹요청" | "가져오기요청" | "응답본문" | "응답자료" | "응답헤더값" => return wasm_unsupported(name, line),
+        _ => {}
+    }
 
     // HTTP server
+    #[cfg(not(target_arch = "wasm32"))]
     match name {
         "서버열기" => return http_server::builtin_server_listen(args, line),
         "요청받기" => return http_server::builtin_accept_request(args, line),
         "응답보내기" => return http_server::builtin_send_response(args, line),
         "연결닫기" => return http_server::builtin_close_connection(args, line),
+        _ => {}
+    }
+    #[cfg(target_arch = "wasm32")]
+    match name {
+        "서버열기" | "요청받기" | "응답보내기" | "연결닫기" => return wasm_unsupported(name, line),
         _ => {}
     }
 
@@ -398,9 +468,15 @@ pub fn call_builtin(
     }
 
     // Module ops
+    #[cfg(not(target_arch = "wasm32"))]
     match name {
         "내보내기" => return module_ops::builtin_export(args, eval.runtime, line),
         "모듈가져오기" => return module_ops::builtin_module_import(args, eval, arena, env, line),
+        _ => {}
+    }
+    #[cfg(target_arch = "wasm32")]
+    match name {
+        "내보내기" | "모듈가져오기" => return wasm_unsupported(name, line),
         _ => {}
     }
 
@@ -416,8 +492,13 @@ pub fn call_builtin(
     }
 
     // Async variants — wrap sync version in a task
+    #[cfg(not(target_arch = "wasm32"))]
     if name.starts_with("비동기") {
         return handle_async_builtin(name, args, eval, arena, env, line);
+    }
+    #[cfg(target_arch = "wasm32")]
+    if name.starts_with("비동기") {
+        return wasm_unsupported(name, line);
     }
 
     Err(CokacError::new(
@@ -426,6 +507,7 @@ pub fn call_builtin(
     ))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn handle_async_builtin(
     name: &str,
     args: Vec<Value>,
@@ -509,6 +591,7 @@ fn handle_async_builtin(
     Ok(Value::Task(task))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn handle_async_http(
     name: &str,
     args: Vec<Value>,
@@ -695,6 +778,7 @@ fn handle_async_http(
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn spawn_http_thread(
     url: String,
     method: String,
@@ -804,6 +888,7 @@ fn spawn_http_thread(
     Ok(Value::Task(task))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn hex_val(b: u8) -> Option<u8> {
     match b {
         b'0'..=b'9' => Some(b - b'0'),
@@ -813,6 +898,7 @@ fn hex_val(b: u8) -> Option<u8> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn percent_decode_lossy(input: &str) -> String {
     let bytes = input.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
@@ -831,6 +917,7 @@ fn percent_decode_lossy(input: &str) -> String {
     String::from_utf8_lossy(&out).to_string()
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn handle_async_accept(
     args: Vec<Value>,
     eval: &mut Evaluator,

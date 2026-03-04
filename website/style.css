@@ -1,0 +1,213 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg: #1a1b26;
+    --bg-surface: #24283b;
+    --bg-panel: #1f2335;
+    --border: #3b4261;
+    --text: #c0caf5;
+    --text-dim: #565f89;
+    --accent: #7aa2f7;
+    --accent-hover: #89b4fa;
+    --green: #9ece6a;
+    --red: #f7768e;
+    --header-h: 56px;
+}
+
+html, body {
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+}
+
+header {
+    height: var(--header-h);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+}
+
+header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.header-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+select {
+    background: var(--bg-panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    outline: none;
+}
+
+select:focus {
+    border-color: var(--accent);
+}
+
+button {
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+#run-btn {
+    background: var(--accent);
+    color: #1a1b26;
+    border-color: var(--accent);
+}
+
+#run-btn:hover {
+    background: var(--accent-hover);
+}
+
+#run-btn:active {
+    transform: scale(0.97);
+}
+
+#clear-btn {
+    background: var(--bg-panel);
+    color: var(--text);
+}
+
+#clear-btn:hover {
+    background: var(--border);
+}
+
+main {
+    display: flex;
+    height: calc(100% - var(--header-h));
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.editor-panel {
+    border-right: 1px solid var(--border);
+}
+
+.panel-header {
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+}
+
+#exec-time {
+    font-weight: 400;
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+#editor {
+    flex: 1;
+    overflow: auto;
+}
+
+#output {
+    flex: 1;
+    overflow: auto;
+    padding: 12px;
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: var(--bg-panel);
+    color: var(--green);
+}
+
+#output.has-error {
+    color: var(--red);
+}
+
+/* CodeMirror theme overrides */
+.cm-editor {
+    height: 100%;
+    font-size: 14px;
+}
+
+.cm-editor .cm-content {
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
+.cm-editor .cm-gutters {
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border);
+    color: var(--text-dim);
+}
+
+.cm-editor .cm-activeLineGutter {
+    background: var(--bg-panel);
+}
+
+.cm-editor .cm-activeLine {
+    background: rgba(122, 162, 247, 0.06);
+}
+
+.cm-editor .cm-cursor {
+    border-left-color: var(--accent);
+}
+
+.cm-editor .cm-selectionBackground,
+.cm-editor.cm-focused .cm-selectionBackground {
+    background: rgba(122, 162, 247, 0.2) !important;
+}
+
+/* Loading state */
+#output.loading {
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+/* Responsive: vertical on narrow screens */
+@media (max-width: 768px) {
+    main {
+        flex-direction: column;
+    }
+
+    .editor-panel {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        height: 50%;
+        flex: none;
+    }
+
+    .output-panel {
+        height: 50%;
+        flex: none;
+    }
+}

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>cokaclang 플레이그라운드</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>cokaclang 플레이그라운드</h1>
+        <div class="header-controls">
+            <select id="examples">
+                <option value="">예제 선택...</option>
+                <option value="hello">안녕하세요</option>
+                <option value="variables">변수와 연산</option>
+                <option value="loop">반복문</option>
+                <option value="function">함수</option>
+                <option value="array">배열</option>
+                <option value="object">객체</option>
+                <option value="fibonacci">피보나치</option>
+                <option value="class">클래스</option>
+                <option value="string">문자열 처리</option>
+                <option value="higher">고차 함수</option>
+                <option value="error">에러 처리</option>
+                <option value="closure">클로저</option>
+                <option value="sort">정렬 알고리즘</option>
+                <option value="math">수학/타입</option>
+                <option value="json">JSON</option>
+                <option value="inherit">상속</option>
+            </select>
+            <button id="run-btn">실행</button>
+            <button id="clear-btn">지우기</button>
+        </div>
+    </header>
+    <main>
+        <div class="panel editor-panel">
+            <div class="panel-header">코드</div>
+            <div id="editor"></div>
+        </div>
+        <div class="panel output-panel">
+            <div class="panel-header">
+                출력
+                <span id="exec-time"></span>
+            </div>
+            <pre id="output"></pre>
+        </div>
+    </main>
+
+    <script type="module" src="app.bundle.js"></script>
+</body>
+</html>

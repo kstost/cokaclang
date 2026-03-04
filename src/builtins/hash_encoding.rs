@@ -1,4 +1,5 @@
 use crate::error::CokacError;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::runtime::Runtime;
 use crate::value::Value;
 
@@ -27,6 +28,7 @@ pub fn builtin_hash_string(args: Vec<Value>, line: i32) -> Result<Value, CokacEr
     Ok(Value::String(hash_to_hex(hash)))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn builtin_hash_file(args: Vec<Value>, runtime: &Runtime, line: i32) -> Result<Value, CokacError> {
     if args.len() != 1 {
         return Err(CokacError::new("'해시파일'은 1개의 인수가 필요합니다.".to_string(), line));

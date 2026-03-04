@@ -9,12 +9,20 @@ pub mod evaluator;
 pub mod runtime;
 pub mod json;
 pub mod builtins;
+pub mod output;
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
 
+#[cfg(not(target_arch = "wasm32"))]
 use environment::Environment;
+#[cfg(not(target_arch = "wasm32"))]
 use evaluator::{Evaluator, ExecSignal};
+#[cfg(not(target_arch = "wasm32"))]
 use runtime::Runtime;
+#[cfg(not(target_arch = "wasm32"))]
 use std::rc::Rc;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run_script(path: &str, args: Vec<String>) -> Result<(), String> {
     let source = std::fs::read_to_string(path).map_err(|e| {
         format!("파일을 읽을 수 없습니다: '{}': {}", path, e)

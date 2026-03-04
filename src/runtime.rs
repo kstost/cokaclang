@@ -33,6 +33,7 @@ pub struct Runtime {
     pub script_argc: usize,
     pub script_argv: Vec<String>,
     // Async job queue (simplified: we use tokio in Rust)
+    #[cfg(not(target_arch = "wasm32"))]
     pub async_runtime: Option<tokio::runtime::Runtime>,
     pub async_jobs: Vec<AsyncJob>,
     pub async_enqueued: u64,
@@ -66,6 +67,7 @@ pub enum AsyncJobKind {
         line: i32,
         stack: Vec<String>,
     },
+    #[cfg(not(target_arch = "wasm32"))]
     ThreadWorker {
         receiver: std::sync::mpsc::Receiver<ThreadResult>,
     },
@@ -77,6 +79,7 @@ pub enum AsyncJobKind {
     },
 }
 
+#[cfg(not(target_arch = "wasm32"))]
     pub enum ThreadResult {
     HttpResponse {
         status: u16,
@@ -101,10 +104,13 @@ pub enum AsyncJobKind {
 
 impl Runtime {
     pub fn new() -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
         let max_queue: usize = std::env::var("COKAC_ASYNC_MAX_QUEUE")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(4096);
+        #[cfg(target_arch = "wasm32")]
+        let max_queue: usize = 4096;
 
         Runtime {
             functions: Vec::new(),
@@ -118,6 +124,7 @@ impl Runtime {
             current_file: None,
             script_argc: 0,
             script_argv: Vec::new(),
+            #[cfg(not(target_arch = "wasm32"))]
             async_runtime: None,
             async_jobs: Vec::new(),
             async_enqueued: 0,
@@ -221,9 +228,16 @@ impl Runtime {
         };
         let candidate = base_dir.join(import_path);
         // Try to canonicalize
-        match candidate.canonicalize() {
-            Ok(p) => p.to_string_lossy().to_string(),
-            Err(_) => candidate.to_string_lossy().to_string(),
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            match candidate.canonicalize() {
+                Ok(p) => return p.to_string_lossy().to_string(),
+                Err(_) => return candidate.to_string_lossy().to_string(),
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            candidate.to_string_lossy().to_string()
         }
     }
 
@@ -234,7 +248,14 @@ impl Runtime {
         let base_dir = if let Some(ref cur) = self.current_file {
             Path::new(cur).parent().unwrap_or(Path::new(".")).to_path_buf()
         } else {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                PathBuf::from(".")
+            }
         };
         let candidate = base_dir.join(path);
         candidate.to_string_lossy().to_string()
@@ -248,6 +269,7 @@ impl Runtime {
         self.modules.push(ModuleEntry { path, exports });
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn get_or_create_tokio_runtime(&mut self) -> &tokio::runtime::Runtime {
         if self.async_runtime.is_none() {
             self.async_runtime = Some(

@@ -942,9 +942,17 @@ impl Parser {
 }
 
 fn read_depth_limit(key: &str, default_value: usize) -> usize {
-    std::env::var(key)
-        .ok()
-        .and_then(|v| v.trim().parse::<usize>().ok())
-        .filter(|v| *v >= 64)
-        .unwrap_or(default_value)
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::env::var(key)
+            .ok()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .filter(|v| *v >= 64)
+            .unwrap_or(default_value)
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = key;
+        default_value
+    }
 }

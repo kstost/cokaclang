@@ -8,7 +8,9 @@ use crate::runtime::Runtime;
 use crate::token::TokenType;
 use crate::value::*;
 use crate::builtins;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::lexer;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::parser::Parser;
 
 #[derive(Debug, Clone)]
@@ -217,7 +219,14 @@ impl<'a> Evaluator<'a> {
             }
             StmtKind::Print(expr) => {
                 let val = self.eval_expr(expr, arena, env)?;
-                println!("{}", val.to_display_string());
+                #[cfg(target_arch = "wasm32")]
+                {
+                    crate::output::capture_write(&format!("{}\n", val.to_display_string()));
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    println!("{}", val.to_display_string());
+                }
                 Ok(ExecSignal::Normal)
             }
             StmtKind::If { condition, then_branch, else_branch } => {
@@ -327,7 +336,18 @@ impl<'a> Evaluator<'a> {
                 Ok(ExecSignal::Return(val))
             }
             StmtKind::Import { ref path, ref alias } => {
-                self.exec_import(path, alias.as_deref(), arena, env, stmt.line)
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    self.exec_import(path, alias.as_deref(), arena, env, stmt.line)
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let _ = (path, alias);
+                    Err(CokacError::new(
+                        "WASM 환경에서는 모듈 가져오기를 사용할 수 없습니다.".to_string(),
+                        stmt.line,
+                    ))
+                }
             }
             StmtKind::Try { try_block, catch_block, ref error_name, ref error_info_name, finally_block } => {
                 let try_result = self.exec_stmt(try_block, arena, env);
@@ -843,7 +863,10 @@ impl<'a> Evaluator<'a> {
         env: &mut Environment,
         line: i32,
     ) -> Result<Value, CokacError> {
+        #[cfg(not(target_arch = "wasm32"))]
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
+        #[cfg(target_arch = "wasm32")]
+        let deadline_ms = js_sys::Date::now() + 300_000.0;
         loop {
             {
                 let t = task.borrow();
@@ -857,16 +880,43 @@ impl<'a> Evaluator<'a> {
                 }
             }
             self.runtime.async_wait_calls += 1;
-            if std::time::Instant::now() >= deadline {
-                self.runtime.async_wait_timeouts += 1;
-                return Err(CokacError::new(
-                    "비동기 작업 대기 시간 초과".to_string(),
-                    line,
-                ));
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                if std::time::Instant::now() >= deadline {
+                    self.runtime.async_wait_timeouts += 1;
+                    return Err(CokacError::new(
+                        "비동기 작업 대기 시간 초과".to_string(),
+                        line,
+                    ));
+                }
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                if js_sys::Date::now() >= deadline_ms {
+                    self.runtime.async_wait_timeouts += 1;
+                    return Err(CokacError::new(
+                        "비동기 작업 대기 시간 초과".to_string(),
+                        line,
+                    ));
+                }
             }
             let progressed = self.drive_async(arena, env)?;
             if !progressed {
+                #[cfg(not(target_arch = "wasm32"))]
                 std::thread::sleep(std::time::Duration::from_millis(1));
+                #[cfg(target_arch = "wasm32")]
+                {
+                    // WASM: no blocking sleep, return current state
+                    let t = task.borrow();
+                    if t.completed {
+                        if t.failed {
+                            let original = t.error_message.clone().unwrap_or_else(|| "알 수 없는 오류".to_string());
+                            return Err(CokacError::new(format!("비동기 작업 실패: {}", original), line));
+                        }
+                        return Ok(t.result.clone().unwrap_or(Value::Nil));
+                    }
+                    return Ok(Value::Nil);
+                }
             }
         }
     }
@@ -919,6 +969,7 @@ impl<'a> Evaluator<'a> {
                 job.task.borrow_mut().complete_error(message, code, line, stack);
                 self.runtime.async_failed += 1;
             }
+            #[cfg(not(target_arch = "wasm32"))]
             crate::runtime::AsyncJobKind::ThreadWorker { receiver } => {
                 match receiver.try_recv() {
                     Ok(result) => {
@@ -1028,6 +1079,7 @@ impl<'a> Evaluator<'a> {
         Ok(())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn exec_import(
         &mut self,
         path: &str,
@@ -1171,6 +1223,7 @@ impl<'a> Evaluator<'a> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn make_http_response_value(
     status: u16,
     body: String,
@@ -1199,6 +1252,7 @@ fn make_http_response_value(
     Value::Object(obj)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn make_accept_value(
     client_fd: i32, method: String, path: String, version: String,
     headers: Vec<(String, String)>, body: String, remote_addr: String,
@@ -1246,11 +1300,19 @@ fn find_method_in_class_chain(class: &Value, method_name: &str) -> Option<Value>
 }
 
 fn read_depth_limit(key: &str, default_value: usize) -> usize {
-    std::env::var(key)
-        .ok()
-        .and_then(|v| v.trim().parse::<usize>().ok())
-        .filter(|v| *v >= 64)
-        .unwrap_or(default_value)
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::env::var(key)
+            .ok()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .filter(|v| *v >= 64)
+            .unwrap_or(default_value)
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = key;
+        default_value
+    }
 }
 
 struct DepthGuard {

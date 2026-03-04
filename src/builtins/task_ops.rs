@@ -194,7 +194,10 @@ pub fn builtin_await_timeout(
     };
     let timeout_ms = crate::value::value_to_number(&args[1], line)? as u64;
 
+    #[cfg(not(target_arch = "wasm32"))]
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+    #[cfg(target_arch = "wasm32")]
+    let deadline_ms = js_sys::Date::now() + timeout_ms as f64;
 
     loop {
         {
@@ -208,28 +211,61 @@ pub fn builtin_await_timeout(
             }
         }
         eval.runtime.async_wait_calls += 1;
-        if std::time::Instant::now() >= deadline {
-            eval.runtime.async_wait_timeouts += 1;
-            return Err(CokacError::new(
-                format!("시간 초과: {}ms 내에 작업이 완료되지 않았습니다.", timeout_ms),
-                line,
-            ));
-        }
-        eval.drive_async(arena, env)?;
-        // drive_async can block while running a job; enforce timeout even if the task completed late.
-        if std::time::Instant::now() >= deadline {
-            eval.runtime.async_wait_timeouts += 1;
-            let t = task.borrow();
-            if !t.completed {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if std::time::Instant::now() >= deadline {
+                eval.runtime.async_wait_timeouts += 1;
                 return Err(CokacError::new(
                     format!("시간 초과: {}ms 내에 작업이 완료되지 않았습니다.", timeout_ms),
                     line,
                 ));
             }
-            return Err(CokacError::new(
-                format!("시간 초과: {}ms 제한을 초과해 작업이 완료되었습니다.", timeout_ms),
-                line,
-            ));
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            if js_sys::Date::now() >= deadline_ms {
+                eval.runtime.async_wait_timeouts += 1;
+                return Err(CokacError::new(
+                    format!("시간 초과: {}ms 내에 작업이 완료되지 않았습니다.", timeout_ms),
+                    line,
+                ));
+            }
+        }
+        eval.drive_async(arena, env)?;
+        // drive_async can block while running a job; enforce timeout even if the task completed late.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if std::time::Instant::now() >= deadline {
+                eval.runtime.async_wait_timeouts += 1;
+                let t = task.borrow();
+                if !t.completed {
+                    return Err(CokacError::new(
+                        format!("시간 초과: {}ms 내에 작업이 완료되지 않았습니다.", timeout_ms),
+                        line,
+                    ));
+                }
+                return Err(CokacError::new(
+                    format!("시간 초과: {}ms 제한을 초과해 작업이 완료되었습니다.", timeout_ms),
+                    line,
+                ));
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            if js_sys::Date::now() >= deadline_ms {
+                eval.runtime.async_wait_timeouts += 1;
+                let t = task.borrow();
+                if !t.completed {
+                    return Err(CokacError::new(
+                        format!("시간 초과: {}ms 내에 작업이 완료되지 않았습니다.", timeout_ms),
+                        line,
+                    ));
+                }
+                return Err(CokacError::new(
+                    format!("시간 초과: {}ms 제한을 초과해 작업이 완료되었습니다.", timeout_ms),
+                    line,
+                ));
+            }
         }
     }
 }

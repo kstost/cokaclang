@@ -1,5 +1,6 @@
 use crate::error::CokacError;
 use crate::json;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::runtime::Runtime;
 use crate::value::Value;
 
@@ -34,6 +35,7 @@ pub fn builtin_json_stringify_pretty(args: Vec<Value>, line: i32) -> Result<Valu
     Ok(Value::String(s))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn builtin_json_read_file(args: Vec<Value>, runtime: &Runtime, line: i32) -> Result<Value, CokacError> {
     if args.len() != 1 {
         return Err(CokacError::new("'자료읽기'는 1개의 인수가 필요합니다.".to_string(), line));
@@ -45,6 +47,7 @@ pub fn builtin_json_read_file(args: Vec<Value>, runtime: &Runtime, line: i32) ->
     json::json_parse(&content, line)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn builtin_json_write_file(args: Vec<Value>, runtime: &Runtime, line: i32) -> Result<Value, CokacError> {
     if args.len() != 2 {
         return Err(CokacError::new("'자료쓰기'는 2개의 인수가 필요합니다.".to_string(), line));
@@ -57,6 +60,7 @@ pub fn builtin_json_write_file(args: Vec<Value>, runtime: &Runtime, line: i32) -
     Ok(Value::Bool(true))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn builtin_json_write_file_pretty(args: Vec<Value>, runtime: &Runtime, line: i32) -> Result<Value, CokacError> {
     if args.len() < 2 || args.len() > 3 {
         return Err(CokacError::new("'자료예쁘게쓰기'는 2~3개의 인수가 필요합니다.".to_string(), line));

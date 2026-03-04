@@ -5,43 +5,58 @@ pub fn builtin_current_time(args: Vec<Value>, line: i32) -> Result<Value, CokacE
     if !args.is_empty() {
         return Err(CokacError::new("'현재시간'은 인수가 필요 없습니다.".to_string(), line));
     }
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as f64;
-    Ok(Value::Number(now))
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as f64;
+        Ok(Value::Number(now))
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let now = js_sys::Date::now() / 1000.0;
+        Ok(Value::Number(now.floor()))
+    }
 }
 
 pub fn builtin_time_string(args: Vec<Value>, line: i32) -> Result<Value, CokacError> {
     if args.len() > 1 {
         return Err(CokacError::new("'시간문자열'은 0~1개의 인수가 필요합니다.".to_string(), line));
     }
-    let timestamp = if args.len() == 1 {
-        crate::value::value_to_number(&args[0], line)? as i64
-    } else {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64
-    };
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let timestamp = if args.len() == 1 {
+            crate::value::value_to_number(&args[0], line)? as i64
+        } else {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64
+        };
 
-    // Format as "YYYY-MM-DD HH:MM:SS" in local time
-    
-    let output = std::process::Command::new("date")
-        .arg("-d")
-        .arg(format!("@{}", timestamp))
-        .arg("+%Y-%m-%d %H:%M:%S")
-        .output();
+        // Format as "YYYY-MM-DD HH:MM:SS" in local time
+        let output = std::process::Command::new("date")
+            .arg("-d")
+            .arg(format!("@{}", timestamp))
+            .arg("+%Y-%m-%d %H:%M:%S")
+            .output();
 
-    match output {
-        Ok(out) if out.status.success() => {
-            let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            Ok(Value::String(s))
+        match output {
+            Ok(out) if out.status.success() => {
+                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                Ok(Value::String(s))
+            }
+            _ => {
+                // Fallback: just return timestamp as string
+                Ok(Value::String(format!("{}", timestamp)))
+            }
         }
-        _ => {
-            // Fallback: just return timestamp as string
-            Ok(Value::String(format!("{}", timestamp)))
-        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = &args;
+        Err(CokacError::new("WASM 환경에서는 '시간문자열'을 사용할 수 없습니다.".to_string(), line))
     }
 }
 
@@ -49,21 +64,37 @@ pub fn builtin_sleep(args: Vec<Value>, line: i32) -> Result<Value, CokacError> {
     if args.len() != 1 {
         return Err(CokacError::new("'대기밀리초'는 1개의 인수가 필요합니다.".to_string(), line));
     }
-    let ms = crate::value::value_to_number(&args[0], line)?;
-    if ms < 0.0 {
-        return Err(CokacError::new("'대기밀리초' 값은 0 이상이어야 합니다.".to_string(), line));
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let ms = crate::value::value_to_number(&args[0], line)?;
+        if ms < 0.0 {
+            return Err(CokacError::new("'대기밀리초' 값은 0 이상이어야 합니다.".to_string(), line));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(ms as u64));
+        Ok(Value::Bool(true))
     }
-    std::thread::sleep(std::time::Duration::from_millis(ms as u64));
-    Ok(Value::Bool(true))
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = &args;
+        Err(CokacError::new("WASM 환경에서는 '대기밀리초'를 사용할 수 없습니다.".to_string(), line))
+    }
 }
 
 pub fn builtin_random(args: Vec<Value>, line: i32) -> Result<Value, CokacError> {
     if !args.is_empty() {
         return Err(CokacError::new("'난수'는 인수가 필요 없습니다.".to_string(), line));
     }
-    use rand::Rng;
-    let val: f64 = rand::thread_rng().gen();
-    Ok(Value::Number(val))
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use rand::Rng;
+        let val: f64 = rand::thread_rng().gen();
+        Ok(Value::Number(val))
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let val = js_sys::Math::random();
+        Ok(Value::Number(val))
+    }
 }
 
 pub fn builtin_random_int(args: Vec<Value>, line: i32) -> Result<Value, CokacError> {
@@ -75,7 +106,16 @@ pub fn builtin_random_int(args: Vec<Value>, line: i32) -> Result<Value, CokacErr
     if min > max {
         std::mem::swap(&mut min, &mut max);
     }
-    use rand::Rng;
-    let val = rand::thread_rng().gen_range(min..=max);
-    Ok(Value::Number(val as f64))
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use rand::Rng;
+        let val = rand::thread_rng().gen_range(min..=max);
+        Ok(Value::Number(val as f64))
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let range = (max - min + 1) as f64;
+        let val = min + (js_sys::Math::random() * range).floor() as i64;
+        Ok(Value::Number(val as f64))
+    }
 }

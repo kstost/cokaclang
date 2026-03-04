@@ -512,6 +512,42 @@ impl<'a> Evaluator<'a> {
                 self.eval_binary(op, left, right, arena, env, expr.line)
             }
             ExprKind::Call { callee, ref args } => {
+                // OOP direct method call sugar: 인스턴스.메서드(...)
+                // Class methods receive implicit self as the first argument.
+                if let ExprKind::Property { target, ref name } = arena.get_expr(callee).kind.clone() {
+                    let target_val = self.eval_expr(target, arena, env)?;
+                    if let Value::Object(obj) = &target_val {
+                        let own_callable = {
+                            let borrowed = obj.borrow();
+                            borrowed.get(name).cloned()
+                        };
+                        if let Some(own_callable) = own_callable {
+                            let args_clone = args.clone();
+                            let mut arg_vals = Vec::with_capacity(args_clone.len());
+                            for &arg in &args_clone {
+                                arg_vals.push(self.eval_expr(arg, arena, env)?);
+                            }
+                            return self.invoke_callable(own_callable, arg_vals, arena, env, expr.line);
+                        }
+
+                        let class_val = {
+                            let borrowed = obj.borrow();
+                            borrowed.get("__클래스").cloned()
+                        };
+                        if let Some(class_obj) = class_val {
+                            if let Some(method_callable) = find_method_in_class_chain(&class_obj, name) {
+                                let args_clone = args.clone();
+                                let mut arg_vals = Vec::with_capacity(args_clone.len() + 1);
+                                arg_vals.push(target_val.clone());
+                                for &arg in &args_clone {
+                                    arg_vals.push(self.eval_expr(arg, arena, env)?);
+                                }
+                                return self.invoke_callable(method_callable, arg_vals, arena, env, expr.line);
+                            }
+                        }
+                    }
+                }
+
                 let callee_val = self.eval_expr(callee, arena, env)?;
                 let args_clone = args.clone();
                 let mut arg_vals = Vec::with_capacity(args_clone.len());
@@ -1185,6 +1221,28 @@ fn make_accept_value(
         o.set("원격주소".to_string(), Value::String(remote_addr));
     }
     Value::Object(obj)
+}
+
+fn find_method_in_class_chain(class: &Value, method_name: &str) -> Option<Value> {
+    let mut current = Some(class.clone());
+    while let Some(cls) = current {
+        if let Value::Object(obj) = &cls {
+            let obj = obj.borrow();
+            if let Some(Value::Object(methods)) = obj.get("메서드") {
+                let methods = methods.borrow();
+                if let Some(method) = methods.get(method_name) {
+                    return Some(method.clone());
+                }
+            }
+            current = match obj.get("부모") {
+                Some(parent @ Value::Object(_)) => Some(parent.clone()),
+                _ => None,
+            };
+        } else {
+            break;
+        }
+    }
+    None
 }
 
 fn read_depth_limit(key: &str, default_value: usize) -> usize {

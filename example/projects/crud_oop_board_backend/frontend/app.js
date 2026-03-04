@@ -85,6 +85,7 @@ function 화면전환(화면) {
 async function API요청(경로, 메서드 = "GET", 본문 = null) {
   const 설정 = {
     method: 메서드,
+    cache: "no-store",
     headers: { "Content-Type": "application/json" }
   };
   if (본문) 설정.body = JSON.stringify(본문);
@@ -138,7 +139,7 @@ function 페이지정보렌더() {
 async function 목록불러오기() {
   const 검색 = encodeURIComponent(요소.검색어.value.trim());
   const 상태값 = encodeURIComponent(요소.상태필터.value);
-  const 경로 = `/posts?페이지=${상태.현재페이지}&크기=${상태.페이지크기}&검색=${검색}&작성자=&상태=${상태값}`;
+  const 경로 = `/posts?페이지=${상태.현재페이지}&크기=${상태.페이지크기}&검색=${검색}&작성자=&상태=${상태값}&_ts=${Date.now()}`;
 
   const 데이터 = await API요청(경로);
   상태.현재목록 = 데이터.목록 || [];

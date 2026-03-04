@@ -1,6 +1,9 @@
 함수 헤더_생성(콘텐츠타입) {
     반환 {
         "Content-Type": 콘텐츠타입,
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type"

@@ -5,6 +5,8 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
+    { "include": "#typeDeclaration" },
+    { "include": "#methodDeclaration" },
     { "include": "#functionDeclaration" },
     { "include": "#controlKeywords" },
     { "include": "#constants" },
@@ -37,6 +39,34 @@
         }
       ]
     },
+    "typeDeclaration": {
+      "patterns": [
+        {
+          "match": "\\b(형식)\\s+([_\\p{L}][\\p{L}\\p{N}_]*)",
+          "captures": {
+            "1": { "name": "storage.type.class.cokac" },
+            "2": { "name": "entity.name.type.class.cokac" }
+          }
+        }
+      ]
+    },
+    "methodDeclaration": {
+      "patterns": [
+        {
+          "match": "\\b(행동)\\s+([_\\p{L}][\\p{L}\\p{N}_]*)",
+          "captures": {
+            "1": { "name": "storage.type.method.cokac" },
+            "2": { "name": "entity.name.function.method.cokac" }
+          }
+        },
+        {
+          "match": "\\b(만들기)\\s*(?=\\()",
+          "captures": {
+            "1": { "name": "storage.type.constructor.cokac" }
+          }
+        }
+      ]
+    },
     "functionDeclaration": {
       "patterns": [
         {
@@ -52,7 +82,7 @@
       "patterns": [
         {
           "name": "keyword.control.cokac",
-          "match": "\\b(변수|상수|만약|아니면|반복|동안|중단|계속|반환|시도|잡기|마침|던지기|가져오기|별칭|비동기|대기|출력)\\b"
+          "match": "\\b(변수|상수|만약|아니면|반복|동안|중단|계속|반환|시도|잡기|마침|던지기|가져오기|별칭|비동기|대기|출력|형식|물려받기|속성|만들기|행동)\\b"
         }
       ]
     },

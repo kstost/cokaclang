@@ -804,6 +804,33 @@ fn spawn_http_thread(
     Ok(Value::Task(task))
 }
 
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(10 + (b - b'a')),
+        b'A'..=b'F' => Some(10 + (b - b'A')),
+        _ => None,
+    }
+}
+
+fn percent_decode_lossy(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(h), Some(l)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
+                out.push((h << 4) | l);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).to_string()
+}
+
 fn handle_async_accept(
     args: Vec<Value>,
     eval: &mut Evaluator,
@@ -848,7 +875,8 @@ fn handle_async_accept(
                 let first_line = request_text.lines().next().unwrap_or("");
                 let parts: Vec<&str> = first_line.split_whitespace().collect();
                 let method = parts.get(0).unwrap_or(&"GET").to_string();
-                let path = parts.get(1).unwrap_or(&"/").to_string();
+                let path_raw = parts.get(1).unwrap_or(&"/").to_string();
+                let path = percent_decode_lossy(&path_raw);
                 let version = parts.get(2).unwrap_or(&"HTTP/1.1").to_string();
                 let mut headers = Vec::new();
                 let mut content_length: usize = 0;

@@ -6,6 +6,33 @@ use std::rc::Rc;
 use crate::error::CokacError;
 use crate::value::*;
 
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(10 + (b - b'a')),
+        b'A'..=b'F' => Some(10 + (b - b'A')),
+        _ => None,
+    }
+}
+
+fn percent_decode_lossy(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(h), Some(l)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
+                out.push((h << 4) | l);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).to_string()
+}
+
 pub fn builtin_server_listen(args: Vec<Value>, line: i32) -> Result<Value, CokacError> {
     if args.is_empty() || args.len() > 3 {
         return Err(CokacError::new("'서버열기'는 1~3개의 인수가 필요합니다.".to_string(), line));
@@ -78,7 +105,8 @@ pub fn builtin_accept_request(args: Vec<Value>, line: i32) -> Result<Value, Coka
     let first_line = request_text.lines().next().unwrap_or("");
     let parts: Vec<&str> = first_line.split_whitespace().collect();
     let method = parts.get(0).unwrap_or(&"GET").to_string();
-    let path = parts.get(1).unwrap_or(&"/").to_string();
+    let path_raw = parts.get(1).unwrap_or(&"/").to_string();
+    let path = percent_decode_lossy(&path_raw);
     let version = parts.get(2).unwrap_or(&"HTTP/1.1").to_string();
 
     // Parse headers

@@ -1,9 +1,9 @@
-![cokaclang](title.jpg)
-
 # COKAC Language
 
 `cokaclang`은 한글로 이루어진 프로그래밍 언어입니다.
 이 저장소는 Rust로 구현된 `cokaclang` 인터프리터와 관련 테스트/예제를 포함합니다.
+
+![cokaclang](title.jpg)
 
 ## 저장소 구성
 

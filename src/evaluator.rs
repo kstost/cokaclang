@@ -453,7 +453,28 @@ impl<'a> Evaluator<'a> {
         let _expr_depth_guard = DepthGuard::new(&mut self.expr_depth);
 
         match expr.kind {
-            ExprKind::Literal(ref val) => Ok(val.clone()),
+            ExprKind::Literal(ref val) => {
+                match val {
+                    // Anonymous function expressions are parsed as literal function values.
+                    // They must be bound to the current arena and capture lexical scope,
+                    // otherwise module-scoped methods can execute against the wrong arena.
+                    Value::Function(f) if !f.is_builtin => {
+                        let mut bound = f.clone();
+                        if bound.arena_index == 0 {
+                            bound.arena_index = self.resolve_arena_index_for(arena);
+                        }
+                        if bound.closure_env.is_none()
+                            && (env.parent.is_some()
+                                || self.runtime.current_exports.is_some()
+                                || self.runtime.current_arena_index == 1)
+                        {
+                            bound.closure_env = Some(Rc::new(RefCell::new(env.clone())));
+                        }
+                        Ok(Value::Function(bound))
+                    }
+                    _ => Ok(val.clone()),
+                }
+            },
             ExprKind::Variable(ref name) => {
                 if let Some(val) = env.get(name) {
                     return Ok(val);

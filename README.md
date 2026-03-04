@@ -10,6 +10,7 @@
 - `runtime/runtime_tests_negative/` : 오류/실패 경로 테스트 파일
 - `example/` : 예제 코드
 - `example/projects/crud_board_backend/` : CRUD 게시판 예제
+- `example/projects/crud_oop_board_backend/` : OOP 방식 CRUD 게시판 예제
 - `tools/vscode-cokac-language/` : VSCode 문법 하이라이트 확장
 - `COKAC_LANGUAGE_REFERENCE.md` : 언어 레퍼런스 문서
 - `build.py`, `builder/` : 빌드 스크립트/도구
@@ -61,6 +62,7 @@ python3 build.py
 경로:
 
 - `example/projects/crud_board_backend/`
+- `example/projects/crud_oop_board_backend/`
 
 이 예제의 현재 구현(`src/store.mod.cokac`)은 MySQL CLI(`mysql`)를 호출하는 방식입니다.
 
@@ -73,6 +75,7 @@ python3 build.py
 예제 상세는 다음 문서 참고:
 
 - `example/projects/crud_board_backend/README.md`
+- `example/projects/crud_oop_board_backend/README.md`
 
 ## VSCode 확장
 

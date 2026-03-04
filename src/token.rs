@@ -29,6 +29,11 @@ pub enum TokenType {
     True,      // 참
     False,     // 거짓
     Nil,       // 없음
+    TypeDecl,  // 형식
+    Inherit,   // 물려받기
+    Field,     // 속성
+    Ctor,      // 만들기
+    Method,    // 행동
 
     // Operators
     Plus,         // +
@@ -123,6 +128,11 @@ pub fn keyword_type(word: &str) -> Option<TokenType> {
         "참" => Some(TokenType::True),
         "거짓" => Some(TokenType::False),
         "없음" => Some(TokenType::Nil),
+        "형식" => Some(TokenType::TypeDecl),
+        "물려받기" => Some(TokenType::Inherit),
+        "속성" => Some(TokenType::Field),
+        "만들기" => Some(TokenType::Ctor),
+        "행동" => Some(TokenType::Method),
         "그리고" => Some(TokenType::AndAnd),
         "또는" => Some(TokenType::OrOr),
         _ => None,

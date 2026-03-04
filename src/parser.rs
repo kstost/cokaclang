@@ -8,6 +8,7 @@ pub struct Parser {
     pub arena: AstArena,
     expr_depth: usize,
     max_expr_depth: usize,
+    synth_counter: usize,
 }
 
 impl Parser {
@@ -18,6 +19,7 @@ impl Parser {
             arena: AstArena::new(),
             expr_depth: 0,
             max_expr_depth: read_depth_limit("COKAC_MAX_PARSE_EXPR_DEPTH", 4096),
+            synth_counter: 0,
         }
     }
 
@@ -94,6 +96,7 @@ impl Parser {
         match tt {
             TokenType::Let | TokenType::Const => self.parse_var_declaration(),
             TokenType::Function => self.parse_function_declaration(false),
+            TokenType::TypeDecl => self.parse_type_declaration(),
             TokenType::Async => {
                 self.advance();
                 self.consume(TokenType::Function, "'함수' 키워드가 필요합니다.")?;
@@ -101,6 +104,11 @@ impl Parser {
             }
             _ => self.parse_statement(),
         }
+    }
+
+    fn next_synth_name(&mut self, prefix: &str) -> String {
+        self.synth_counter += 1;
+        format!("{}_{}", prefix, self.synth_counter)
     }
 
     fn parse_var_declaration(&mut self) -> Result<StmtId, String> {
@@ -137,6 +145,260 @@ impl Parser {
         self.consume(TokenType::RParen, "')' 기호가 필요합니다.")?;
         let body = self.parse_block()?;
         Ok(self.arena.add_stmt(StmtKind::Function { name, params, body, is_async }, line))
+    }
+
+    fn parse_type_declaration(&mut self) -> Result<StmtId, String> {
+        #[derive(Clone)]
+        struct FieldDecl {
+            name: String,
+            initializer: Option<ExprId>,
+            line: i32,
+        }
+        #[derive(Clone)]
+        struct MethodDecl {
+            name: String,
+            params: Vec<String>,
+            body: StmtId,
+            line: i32,
+        }
+
+        let line = self.line();
+        self.advance(); // consume 형식
+        let name_tok = self.consume(TokenType::Identifier, "형식 이름이 필요합니다.")?;
+        let type_name = name_tok.lexeme.clone();
+
+        let parent_expr = if self.match_token(TokenType::Inherit) {
+            Some(self.parse_type_parent_expr()?)
+        } else {
+            None
+        };
+
+        self.consume(TokenType::LBrace, "'{' 기호가 필요합니다.")?;
+
+        let mut fields: Vec<FieldDecl> = Vec::new();
+        let mut ctor: Option<MethodDecl> = None;
+        let mut methods: Vec<MethodDecl> = Vec::new();
+
+        while !self.check(TokenType::RBrace) && !self.is_at_end() {
+            if self.match_token(TokenType::Field) {
+                let member_line = self.previous().line;
+                let field_tok = self.consume(TokenType::Identifier, "속성 이름이 필요합니다.")?;
+                let field_name = field_tok.lexeme.clone();
+                if fields.iter().any(|f| f.name == field_name) {
+                    return Err(format!(
+                        "[줄 {}] 오류: 속성 '{}'이(가) 이미 정의되어 있습니다.",
+                        field_tok.line, field_name
+                    ));
+                }
+                let initializer = if self.match_token(TokenType::Equal) {
+                    Some(self.parse_expression()?)
+                } else {
+                    None
+                };
+                self.consume(TokenType::Semicolon, "';' 기호가 필요합니다.")?;
+                fields.push(FieldDecl {
+                    name: field_name,
+                    initializer,
+                    line: member_line,
+                });
+                continue;
+            }
+
+            if self.match_token(TokenType::Ctor) {
+                if ctor.is_some() {
+                    return Err(format!(
+                        "[줄 {}] 오류: '만들기'는 형식당 하나만 정의할 수 있습니다.",
+                        self.previous().line
+                    ));
+                }
+                let member_line = self.previous().line;
+                self.consume(TokenType::LParen, "'(' 기호가 필요합니다.")?;
+                let mut params = Vec::new();
+                if !self.check(TokenType::RParen) {
+                    loop {
+                        let param = self.consume(TokenType::Identifier, "매개변수 이름이 필요합니다.")?;
+                        params.push(param.lexeme.clone());
+                        if !self.match_token(TokenType::Comma) {
+                            break;
+                        }
+                    }
+                }
+                self.consume(TokenType::RParen, "')' 기호가 필요합니다.")?;
+                let body = self.parse_block()?;
+                ctor = Some(MethodDecl {
+                    name: "초기화".to_string(),
+                    params,
+                    body,
+                    line: member_line,
+                });
+                continue;
+            }
+
+            if self.match_token(TokenType::Method) {
+                let member_line = self.previous().line;
+                let method_tok = self.consume(TokenType::Identifier, "행동 이름이 필요합니다.")?;
+                let method_name = method_tok.lexeme.clone();
+                if method_name == "초기화" {
+                    return Err(format!(
+                        "[줄 {}] 오류: '행동 초기화'는 사용할 수 없습니다. 생성자는 '만들기'를 사용하세요.",
+                        method_tok.line
+                    ));
+                }
+                if methods.iter().any(|m| m.name == method_name) {
+                    return Err(format!(
+                        "[줄 {}] 오류: 행동 '{}'이(가) 이미 정의되어 있습니다.",
+                        method_tok.line, method_name
+                    ));
+                }
+                self.consume(TokenType::LParen, "'(' 기호가 필요합니다.")?;
+                let mut params = Vec::new();
+                if !self.check(TokenType::RParen) {
+                    loop {
+                        let param = self.consume(TokenType::Identifier, "매개변수 이름이 필요합니다.")?;
+                        params.push(param.lexeme.clone());
+                        if !self.match_token(TokenType::Comma) {
+                            break;
+                        }
+                    }
+                }
+                self.consume(TokenType::RParen, "')' 기호가 필요합니다.")?;
+                let body = self.parse_block()?;
+                methods.push(MethodDecl {
+                    name: method_name,
+                    params,
+                    body,
+                    line: member_line,
+                });
+                continue;
+            }
+
+            return Err(format!(
+                "[줄 {}] 오류: 형식 본문에는 '속성', '만들기', '행동'만 사용할 수 있습니다.",
+                self.line()
+            ));
+        }
+
+        self.consume(TokenType::RBrace, "'}' 기호가 필요합니다.")?;
+
+        let mut method_keys: Vec<String> = Vec::new();
+        let mut method_values: Vec<ExprId> = Vec::new();
+
+        for method in methods {
+            let mut full_params = vec!["자기".to_string()];
+            full_params.extend(method.params);
+            let method_value = Value::make_function(String::new(), full_params, method.body, false);
+            let method_expr = self.arena.add_expr(ExprKind::Literal(method_value), method.line);
+            method_keys.push(method.name);
+            method_values.push(method_expr);
+        }
+
+        if ctor.is_some() || !fields.is_empty() {
+            let mut ctor_stmts: Vec<StmtId> = Vec::new();
+            for field in fields {
+                let self_expr = self
+                    .arena
+                    .add_expr(ExprKind::Variable("자기".to_string()), field.line);
+                let value_expr = match field.initializer {
+                    Some(e) => e,
+                    None => self.arena.add_expr(ExprKind::Literal(Value::Nil), field.line),
+                };
+                let assign_stmt = self.arena.add_stmt(
+                    StmtKind::PropertyAssign {
+                        target: self_expr,
+                        name: field.name,
+                        value: value_expr,
+                    },
+                    field.line,
+                );
+                ctor_stmts.push(assign_stmt);
+            }
+
+            let ctor_params = if let Some(c) = ctor.clone() {
+                let ctor_body_stmts = match self.arena.get_stmt(c.body).kind.clone() {
+                    StmtKind::Block(items) => items,
+                    _ => vec![c.body],
+                };
+                for stmt in ctor_body_stmts {
+                    ctor_stmts.push(stmt);
+                }
+                c.params
+            } else {
+                Vec::new()
+            };
+
+            let ctor_block = self.arena.add_stmt(StmtKind::Block(ctor_stmts), line);
+            let mut full_params = vec!["자기".to_string()];
+            full_params.extend(ctor_params);
+            let ctor_value = Value::make_function(String::new(), full_params, ctor_block, false);
+            let ctor_expr = self.arena.add_expr(ExprKind::Literal(ctor_value), line);
+            method_keys.push("초기화".to_string());
+            method_values.push(ctor_expr);
+        }
+
+        let methods_expr = self.arena.add_expr(
+            ExprKind::Object {
+                keys: method_keys,
+                values: method_values,
+            },
+            line,
+        );
+        let methods_name = self.next_synth_name("__형식메서드");
+        let methods_decl = self.arena.add_stmt(
+            StmtKind::Let {
+                name: methods_name.clone(),
+                initializer: methods_expr,
+                is_const: false,
+            },
+            line,
+        );
+
+        let create_callee = self
+            .arena
+            .add_expr(ExprKind::Variable("클래스생성".to_string()), line);
+        let type_name_expr = self
+            .arena
+            .add_expr(ExprKind::Literal(Value::String(type_name.clone())), line);
+        let methods_var_expr = self.arena.add_expr(ExprKind::Variable(methods_name), line);
+        let mut create_args = vec![type_name_expr, methods_var_expr];
+        if let Some(parent) = parent_expr {
+            create_args.push(parent);
+        }
+        let create_call = self.arena.add_expr(
+            ExprKind::Call {
+                callee: create_callee,
+                args: create_args,
+            },
+            line,
+        );
+        let type_decl = self.arena.add_stmt(
+            StmtKind::Let {
+                name: type_name,
+                initializer: create_call,
+                is_const: false,
+            },
+            line,
+        );
+
+        Ok(self.arena.add_stmt(StmtKind::Block(vec![methods_decl, type_decl]), line))
+    }
+
+    fn parse_type_parent_expr(&mut self) -> Result<ExprId, String> {
+        let line = self.line();
+        let base_tok = self.consume(TokenType::Identifier, "부모 형식 이름이 필요합니다.")?;
+        let mut expr = self
+            .arena
+            .add_expr(ExprKind::Variable(base_tok.lexeme.clone()), line);
+        while self.match_token(TokenType::Dot) {
+            let name_tok = self.consume(TokenType::Identifier, "속성 이름이 필요합니다.")?;
+            expr = self.arena.add_expr(
+                ExprKind::Property {
+                    target: expr,
+                    name: name_tok.lexeme.clone(),
+                },
+                line,
+            );
+        }
+        Ok(expr)
     }
 
     fn parse_statement(&mut self) -> Result<StmtId, String> {

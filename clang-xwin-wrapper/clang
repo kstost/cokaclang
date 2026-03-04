@@ -1,0 +1,14 @@
+#!/bin/bash
+args=()
+skip_next=false
+for arg in "$@"; do
+    if $skip_next; then
+        args+=("-isystem" "$arg")
+        skip_next=false
+    elif [ "$arg" = "/imsvc" ]; then
+        skip_next=true
+    else
+        args+=("$arg")
+    fi
+done
+exec /usr/bin/clang "${args[@]}"

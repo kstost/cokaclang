@@ -3,6 +3,10 @@
 포트 `3000`에서 동작하는 게시판 CRUD 백엔드이며, 동일 서버가 프론트엔드 정적 파일도 함께 서빙합니다.
 저장소는 인메모리/JSON 파일이 아니라 MySQL을 사용합니다.
 
+동일 기능의 OOP 구현 예제:
+
+- `../crud_oop_board_backend/`
+
 ## 구조
 
 - `src/main.cokac`: 서버 엔트리/의존성 연결
@@ -22,11 +26,11 @@
 
 환경변수(선택):
 
-- `COKAC_DB_HOST` (기본: `127.0.0.1`)
+- `COKAC_DB_HOST` (기본: `localhost`)
 - `COKAC_DB_PORT` (기본: `3306`)
-- `COKAC_DB_USER` (기본: `root`)
-- `COKAC_DB_PASSWORD` (기본: 빈값)
-- `COKAC_DB_NAME` (기본: `cokac_board`)
+- `COKAC_DB_USER` (기본: `cokac`)
+- `COKAC_DB_PASSWORD` (기본: `cokac`)
+- `COKAC_DB_NAME` (기본: `cokac`)
 - `COKAC_MYSQL_CMD` (기본: `mysql`)
 
 서버 시작 시 DB/테이블을 자동 생성합니다.

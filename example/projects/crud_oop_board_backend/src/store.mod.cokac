@@ -1,0 +1,320 @@
+함수 상태_생성() {
+    반환 {
+        타입: "mysql"
+    };
+}
+
+함수 쉘_단일인용(텍스트) {
+    변수 값 = 문자열(텍스트);
+    값 = 문자치환(값, "'", "'\"'\"'");
+    반환 "'" + 값 + "'";
+}
+
+함수 SQL_문자열(텍스트) {
+    변수 값 = 문자열(텍스트);
+    값 = 문자치환(값, "\\", "\\\\");
+    값 = 문자치환(값, "'", "''");
+    반환 "'" + 값 + "'";
+}
+
+함수 SQL_식별자(이름) {
+    변수 값 = 문자열(이름);
+    값 = 문자치환(값, "`", "``");
+    반환 "`" + 값 + "`";
+}
+
+함수 마지막_비어있지않은_줄(텍스트) {
+    변수 줄들 = 문자분할(문자열(텍스트), "\n");
+    변수 줄 = "";
+    변수 후보 = "";
+    동안 (변수 i = 0; i < 길이(줄들); i = i + 1) {
+        줄 = 문자다듬기(줄들[i]);
+        만약 (줄 != "") {
+            후보 = 줄;
+        }
+    }
+    반환 후보;
+}
+
+함수 MySQL_명령_구성(설정, SQL, DB사용) {
+    변수 cmd = 설정.MySQL명령;
+    cmd = cmd + " --batch --raw --skip-column-names --default-character-set=utf8mb4";
+    cmd = cmd + " --host=" + 쉘_단일인용(설정.DB호스트);
+    cmd = cmd + " --port=" + 문자열(설정.DB포트);
+    cmd = cmd + " --user=" + 쉘_단일인용(설정.DB사용자);
+
+    만약 (DB사용) {
+        cmd = cmd + " --database=" + 쉘_단일인용(설정.DB이름);
+    }
+
+    cmd = cmd + " --execute=" + 쉘_단일인용(SQL);
+    반환 cmd;
+}
+
+함수 MySQL_실행_내부(설정, SQL, DB사용) {
+    변수 명령 = MySQL_명령_구성(설정, SQL, DB사용);
+    변수 옵션 = {시간제한초: 10, 환경: {MYSQL_PWD: 설정.DB비밀번호}};
+    변수 결과 = 명령실행결과(명령, 옵션);
+
+    만약 (!결과.성공) {
+        던지기 "MySQL 실행 실패: " + 문자다듬기(문자열(결과.표준에러));
+    }
+
+    반환 결과;
+}
+
+함수 MySQL_실행(설정, SQL) {
+    반환 MySQL_실행_내부(설정, SQL, 참);
+}
+
+함수 MySQL_서버실행(설정, SQL) {
+    반환 MySQL_실행_내부(설정, SQL, 거짓);
+}
+
+함수 MySQL_JSON_조회(설정, SQL, 기본값) {
+    변수 결과 = MySQL_실행(설정, SQL);
+    변수 출력값 = 마지막_비어있지않은_줄(결과.표준출력);
+    만약 (출력값 == "") {
+        반환 기본값;
+    }
+
+    시도 {
+        반환 자료파싱(출력값);
+    } 잡기(메시지, 오류정보) {
+        던지기 "MySQL JSON 파싱 실패: " + 메시지;
+    } 마침 {}
+}
+
+함수 MySQL_정수_조회(설정, SQL, 기본값) {
+    변수 결과 = MySQL_실행(설정, SQL);
+    변수 출력값 = 마지막_비어있지않은_줄(결과.표준출력);
+    만약 (출력값 == "") {
+        반환 기본값;
+    }
+
+    시도 {
+        반환 정수(숫자(출력값));
+    } 잡기(메시지, 오류정보) {
+        반환 기본값;
+    } 마침 {}
+}
+
+함수 DB_초기화(설정) {
+    변수 DB명 = SQL_식별자(설정.DB이름);
+
+    시도 {
+        MySQL_서버실행(설정,
+            "CREATE DATABASE IF NOT EXISTS " + DB명 +
+            " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+        );
+    } 잡기(메시지, 오류정보) {
+        // DB 생성 권한이 없는 계정도 있으므로, 기존 DB가 있다고 가정하고 계속 진행
+    } 마침 {}
+
+    MySQL_실행(설정,
+        "CREATE TABLE IF NOT EXISTS posts (" +
+        " id BIGINT PRIMARY KEY AUTO_INCREMENT," +
+        " title TEXT NOT NULL," +
+        " content LONGTEXT NOT NULL," +
+        " author VARCHAR(255) NOT NULL," +
+        " tags_json JSON NULL," +
+        " status VARCHAR(50) NOT NULL DEFAULT '게시'," +
+        " view_count INT NOT NULL DEFAULT 0," +
+        " like_count INT NOT NULL DEFAULT 0," +
+        " created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+        " updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" +
+        ");"
+    );
+}
+
+함수 불러오기(상태, 설정) {
+    DB_초기화(설정);
+}
+
+함수 목록_조회(상태) {
+    던지기 "목록_조회는 설정 인자가 필요한 DB 저장소입니다. 라우터에서 목록_조회_DB를 사용해야 합니다.";
+}
+
+함수 목록_조회_DB(상태, 설정) {
+    변수 SQL =
+        "SELECT COALESCE(JSON_ARRAYAGG(JSON_OBJECT(" +
+        "'아이디', t.id, " +
+        "'제목', t.title, " +
+        "'내용', t.content, " +
+        "'작성자', t.author, " +
+        "'태그', COALESCE(t.tags_json, JSON_ARRAY()), " +
+        "'상태', t.status, " +
+        "'조회수', t.view_count, " +
+        "'좋아요수', t.like_count, " +
+        "'생성시각', DATE_FORMAT(t.created_at, '%Y-%m-%d %H:%i:%s'), " +
+        "'수정시각', DATE_FORMAT(t.updated_at, '%Y-%m-%d %H:%i:%s')" +
+        ")), JSON_ARRAY()) " +
+        "FROM (SELECT * FROM posts ORDER BY id DESC) t;";
+
+    반환 MySQL_JSON_조회(설정, SQL, []);
+}
+
+함수 단건_조회(상태, 설정, 아이디) {
+    변수 SQL =
+        "SELECT JSON_OBJECT(" +
+        "'아이디', id, " +
+        "'제목', title, " +
+        "'내용', content, " +
+        "'작성자', author, " +
+        "'태그', COALESCE(tags_json, JSON_ARRAY()), " +
+        "'상태', status, " +
+        "'조회수', view_count, " +
+        "'좋아요수', like_count, " +
+        "'생성시각', DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s'), " +
+        "'수정시각', DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s')" +
+        ") FROM posts WHERE id = " + 문자열(아이디) + " LIMIT 1;";
+
+    반환 MySQL_JSON_조회(설정, SQL, 없음);
+}
+
+함수 조회수_증가(상태, 설정, 아이디) {
+    MySQL_실행(설정, "UPDATE posts SET view_count = view_count + 1 WHERE id = " + 문자열(아이디) + ";");
+    반환 단건_조회(상태, 설정, 아이디);
+}
+
+함수 좋아요_증가(상태, 설정, 아이디) {
+    MySQL_실행(설정, "UPDATE posts SET like_count = like_count + 1 WHERE id = " + 문자열(아이디) + ";");
+    반환 단건_조회(상태, 설정, 아이디);
+}
+
+함수 게시글_생성(상태, 설정, 제목, 내용, 작성자, 태그, 상태값) {
+    변수 태그JSON = 자료문자열화(태그);
+    변수 SQL =
+        "INSERT INTO posts(title, content, author, tags_json, status) VALUES (" +
+        SQL_문자열(제목) + ", " +
+        SQL_문자열(내용) + ", " +
+        SQL_문자열(작성자) + ", " +
+        "CAST(" + SQL_문자열(태그JSON) + " AS JSON), " +
+        SQL_문자열(상태값) +
+        ");";
+
+    MySQL_실행(설정, SQL);
+    변수 새아이디 = MySQL_정수_조회(설정, "SELECT id FROM posts ORDER BY id DESC LIMIT 1;", -1);
+    만약 (새아이디 < 1) {
+        반환 없음;
+    }
+    반환 단건_조회(상태, 설정, 새아이디);
+}
+
+함수 게시글_수정(상태, 설정, 아이디, 제목, 내용, 작성자, 태그, 상태값) {
+    변수 태그JSON = 자료문자열화(태그);
+    변수 SQL =
+        "UPDATE posts SET " +
+        "title = " + SQL_문자열(제목) + ", " +
+        "content = " + SQL_문자열(내용) + ", " +
+        "author = " + SQL_문자열(작성자) + ", " +
+        "tags_json = CAST(" + SQL_문자열(태그JSON) + " AS JSON), " +
+        "status = " + SQL_문자열(상태값) + ", " +
+        "updated_at = CURRENT_TIMESTAMP " +
+        "WHERE id = " + 문자열(아이디) + ";";
+
+    MySQL_실행(설정, SQL);
+    반환 단건_조회(상태, 설정, 아이디);
+}
+
+함수 게시글_부분수정(상태, 설정, 아이디, 바꿀값) {
+    변수 조각 = [];
+
+    만약 (바꿀값.제목 != 없음) {
+        배열추가(조각, "title = " + SQL_문자열(문자열(바꿀값.제목)));
+    }
+    만약 (바꿀값.내용 != 없음) {
+        배열추가(조각, "content = " + SQL_문자열(문자열(바꿀값.내용)));
+    }
+    만약 (바꿀값.작성자 != 없음) {
+        배열추가(조각, "author = " + SQL_문자열(문자열(바꿀값.작성자)));
+    }
+    만약 (바꿀값.상태 != 없음) {
+        배열추가(조각, "status = " + SQL_문자열(문자열(바꿀값.상태)));
+    }
+    만약 (바꿀값.태그 != 없음) {
+        변수 태그JSON = 자료문자열화(바꿀값.태그);
+        배열추가(조각, "tags_json = CAST(" + SQL_문자열(태그JSON) + " AS JSON)");
+    }
+
+    배열추가(조각, "updated_at = CURRENT_TIMESTAMP");
+
+    변수 SQL = "UPDATE posts SET " + 배열문자열합치기(조각, ", ") + " WHERE id = " + 문자열(아이디) + ";";
+    MySQL_실행(설정, SQL);
+    반환 단건_조회(상태, 설정, 아이디);
+}
+
+함수 게시글_삭제(상태, 설정, 아이디) {
+    변수 기존 = MySQL_정수_조회(설정, "SELECT COUNT(*) FROM posts WHERE id = " + 문자열(아이디) + ";", 0);
+    만약 (기존 <= 0) {
+        반환 거짓;
+    }
+
+    MySQL_실행(설정, "DELETE FROM posts WHERE id = " + 문자열(아이디) + ";");
+    반환 참;
+}
+
+내보내기("상태_생성", 상태_생성);
+내보내기("불러오기", 불러오기);
+내보내기("목록_조회", 목록_조회);
+내보내기("목록_조회_DB", 목록_조회_DB);
+내보내기("단건_조회", 단건_조회);
+내보내기("조회수_증가", 조회수_증가);
+내보내기("좋아요_증가", 좋아요_증가);
+내보내기("게시글_생성", 게시글_생성);
+내보내기("게시글_수정", 게시글_수정);
+내보내기("게시글_부분수정", 게시글_부분수정);
+내보내기("게시글_삭제", 게시글_삭제);
+
+형식 게시글저장소 {
+    속성 설정 = 없음;
+
+    만들기(설정) {
+        자기.설정 = 설정;
+        DB_초기화(설정);
+    }
+
+    행동 목록조회() {
+        반환 목록_조회_DB(없음, 자기.설정);
+    }
+
+    행동 단건조회(아이디) {
+        반환 단건_조회(없음, 자기.설정, 아이디);
+    }
+
+    행동 조회수증가(아이디) {
+        반환 조회수_증가(없음, 자기.설정, 아이디);
+    }
+
+    행동 좋아요증가(아이디) {
+        반환 좋아요_증가(없음, 자기.설정, 아이디);
+    }
+
+    행동 생성(제목, 내용, 작성자, 태그, 상태값) {
+        반환 게시글_생성(없음, 자기.설정, 제목, 내용, 작성자, 태그, 상태값);
+    }
+
+    행동 수정(아이디, 제목, 내용, 작성자, 태그, 상태값) {
+        반환 게시글_수정(없음, 자기.설정, 아이디, 제목, 내용, 작성자, 태그, 상태값);
+    }
+
+    행동 부분수정(아이디, 바꿀값) {
+        반환 게시글_부분수정(없음, 자기.설정, 아이디, 바꿀값);
+    }
+
+    행동 삭제(아이디) {
+        반환 게시글_삭제(없음, 자기.설정, 아이디);
+    }
+}
+
+함수 저장소_클래스_생성() {
+    반환 게시글저장소;
+}
+
+함수 저장소_인스턴스_생성(설정) {
+    변수 저장소클래스 = 저장소_클래스_생성();
+    반환 인스턴스생성(저장소클래스, [설정]);
+}
+
+내보내기("저장소_클래스_생성", 저장소_클래스_생성);
+내보내기("저장소_인스턴스_생성", 저장소_인스턴스_생성);
